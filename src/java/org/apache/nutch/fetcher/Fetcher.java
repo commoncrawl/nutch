@@ -683,6 +683,7 @@ public class Fetcher extends Configured implements Tool,
                 continue;
               }
               if (rules.getCrawlDelay() > 0) {
+                fit.datum.getMetaData().put(new Text(Nutch.CRAWL_DELAY_KEY), new Text(Long.toString(rules.getCrawlDelay())));
                 if (rules.getCrawlDelay() > maxCrawlDelay && maxCrawlDelay >= 0) {
                   // unblock
                   fetchQueues.finishFetchItem(fit, true);
@@ -698,7 +699,10 @@ public class Fetcher extends Configured implements Tool,
                   }
                 }
               }
+              long startTime = System.currentTimeMillis();
               ProtocolOutput output = protocol.getProtocolOutput(fit.url, fit.datum);
+              fit.datum.getMetaData().put(new Text(Nutch.FETCH_DURATION_KEY), new Text(Long.toString(System.currentTimeMillis() - startTime)));
+
               ProtocolStatus status = output.getStatus();
               Content content = output.getContent();
               ParseStatus pstatus = null;

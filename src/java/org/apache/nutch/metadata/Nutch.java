@@ -71,4 +71,10 @@ public interface Nutch {
   public static final String FIXED_INTERVAL_KEY = "fixedInterval";
 
   public static final Text WRITABLE_FIXED_INTERVAL_KEY = new Text(FIXED_INTERVAL_KEY);
+
+  // time in ms it took us to fetch a page
+  public static final String FETCH_DURATION_KEY = "cc.fetch.duration";
+
+  // robots.txt crawl delay if it exists
+  public static final String CRAWL_DELAY_KEY = "cc.crawl.delay";
 }
