@@ -64,7 +64,7 @@ public class CrawlDb extends Configured implements Tool {
   }
   
   public void update(Path crawlDb, Path[] segments, boolean normalize, boolean filter, boolean additionsAllowed, boolean force) throws IOException {
-    FileSystem fs = FileSystem.get(getConf());
+    FileSystem fs = crawlDb.getFileSystem(getConf());
     Path lock = new Path(crawlDb, LOCK_NAME);
     LockUtil.createLockFile(fs, lock, force);
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -125,7 +125,7 @@ public class CrawlDb extends Configured implements Tool {
     job.setJobName("crawldb " + crawlDb);
 
     Path current = new Path(crawlDb, CURRENT_NAME);
-    if (FileSystem.get(job).exists(current)) {
+    if (current.getFileSystem(job).exists(current)) {
       FileInputFormat.addInputPath(job, current);
     }
     job.setInputFormat(SequenceFileInputFormat.class);
@@ -148,7 +148,7 @@ public class CrawlDb extends Configured implements Tool {
     boolean preserveBackup = job.getBoolean("db.preserve.backup", true);
 
     Path newCrawlDb = FileOutputFormat.getOutputPath(job);
-    FileSystem fs = new JobClient(job).getFs();
+    FileSystem fs = newCrawlDb.getFileSystem(job);
     Path old = new Path(crawlDb, "old");
     Path current = new Path(crawlDb, CURRENT_NAME);
     if (fs.exists(current)) {
