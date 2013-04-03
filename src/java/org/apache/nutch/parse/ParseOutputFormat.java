@@ -109,6 +109,7 @@ public class ParseOutputFormat implements OutputFormat<Text, Parse> {
                                                      : maxOutlinksPerPage;
     final CompressionType compType = SequenceFileOutputFormat.getOutputCompressionType(job);
     Path out = FileOutputFormat.getOutputPath(job);
+    FileSystem outFs = out.getFileSystem(job);
     
     Path text = new Path(new Path(out, ParseText.DIR_NAME), name);
     Path data = new Path(new Path(out, ParseData.DIR_NAME), name);
@@ -117,15 +118,15 @@ public class ParseOutputFormat implements OutputFormat<Text, Parse> {
     final String[] parseMDtoCrawlDB = job.get("db.parsemeta.to.crawldb","").split(" *, *");
     
     final MapFile.Writer textOut =
-      new MapFile.Writer(job, fs, text.toString(), Text.class, ParseText.class,
+      new MapFile.Writer(job, outFs, text.toString(), Text.class, ParseText.class,
           CompressionType.RECORD, progress);
     
     final MapFile.Writer dataOut =
-      new MapFile.Writer(job, fs, data.toString(), Text.class, ParseData.class,
+      new MapFile.Writer(job, outFs, data.toString(), Text.class, ParseData.class,
           compType, progress);
     
     final SequenceFile.Writer crawlOut =
-      SequenceFile.createWriter(fs, job, crawl, Text.class, CrawlDatum.class,
+      SequenceFile.createWriter(outFs, job, crawl, Text.class, CrawlDatum.class,
           compType, progress);
     
     return new RecordWriter<Text, Parse>() {
