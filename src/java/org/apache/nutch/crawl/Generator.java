@@ -495,7 +495,8 @@ public class Generator extends Configured implements Tool {
         + System.currentTimeMillis());
 
     Path lock = new Path(dbDir, CrawlDb.LOCK_NAME);
-    FileSystem fs = FileSystem.get(getConf());
+    FileSystem fs = lock.getFileSystem(getConf());
+    FileSystem segFs = segments.getFileSystem(getConf());
     LockUtil.createLockFile(fs, lock, force);
 
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -557,25 +558,25 @@ public class Generator extends Configured implements Tool {
     // output and turn them into segments
     List<Path> generatedSegments = new ArrayList<Path>();
 
-    FileStatus[] status = fs.listStatus(tempDir);
+    FileStatus[] status = segFs.listStatus(tempDir);
     try {
       for (FileStatus stat : status) {
         Path subfetchlist = stat.getPath();
         if (!subfetchlist.getName().startsWith("fetchlist-")) continue;
         // start a new partition job for this segment
-        Path newSeg = partitionSegment(fs, segments, subfetchlist, numLists);
+        Path newSeg = partitionSegment(segFs, segments, subfetchlist, numLists);
         generatedSegments.add(newSeg);
       }
     } catch (Exception e) {
       LOG.warn("Generator: exception while partitioning segments, exiting ...");
-      fs.delete(tempDir, true);
+      segFs.delete(tempDir, true);
       return null;
     }
 
     if (generatedSegments.size() == 0) {
       LOG.warn("Generator: 0 records selected for fetching, exiting ...");
       LockUtil.removeLockFile(fs, lock);
-      fs.delete(tempDir, true);
+      segFs.delete(tempDir, true);
       return null;
     }
 
@@ -604,15 +605,15 @@ public class Generator extends Configured implements Tool {
         CrawlDb.install(job, dbDir);
       } catch (IOException e) {
         LockUtil.removeLockFile(fs, lock);
-        fs.delete(tempDir, true);
-        fs.delete(tempDir2, true);
+        segFs.delete(tempDir, true);
+        segFs.delete(tempDir2, true);
         throw e;
       }
-      fs.delete(tempDir2, true);
+      segFs.delete(tempDir2, true);
     }
 
     LockUtil.removeLockFile(fs, lock);
-    fs.delete(tempDir, true);
+    segFs.delete(tempDir, true);
 
     long end = System.currentTimeMillis();
     LOG.info("Generator: finished at " + sdf.format(end) + ", elapsed: " + TimingUtil.elapsedTime(start, end));
