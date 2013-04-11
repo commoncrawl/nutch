@@ -54,6 +54,8 @@ public class Injector extends Configured implements Tool {
   
   /** metadata key reserved for setting a custom score for a specific URL */
   public static String nutchScoreMDName = "nutch.score";
+  /** alternative key for setting a custom score */
+  public static String ccScoreMDName = "rank10";
   /** metadata key reserved for setting a custom fetchInterval for a specific URL */
   public static String nutchFetchIntervalMDName = "nutch.fetchInterval";
   /** metadata key reserved for setting a fixed custom fetchInterval for a specific URL */
@@ -109,7 +111,7 @@ public class Injector extends Configured implements Tool {
     		  }
     		  String metaname = splits[s].substring(0, indexEquals);
     		  String metavalue = splits[s].substring(indexEquals+1);
-    		  if (metaname.equals(nutchScoreMDName)) {
+    		  if (metaname.equals(nutchScoreMDName) || metaname.equals(ccScoreMDName)) {
     			  try {
     			  customScore = Float.parseFloat(metavalue);}
     			  catch (NumberFormatException nfe){}
