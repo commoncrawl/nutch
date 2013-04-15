@@ -77,4 +77,7 @@ public interface Nutch {
 
   // robots.txt crawl delay if it exists
   public static final String CRAWL_DELAY_KEY = "cc.crawl.delay";
+
+  // IP address we fetched from
+  public static final String FETCH_DEST_IP_KEY = "cc.dest.ip";
 }
