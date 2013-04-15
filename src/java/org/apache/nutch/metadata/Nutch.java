@@ -80,4 +80,7 @@ public interface Nutch {
 
   // IP address we fetched from
   public static final String FETCH_DEST_IP_KEY = "cc.dest.ip";
+
+  // Verbatim request we fetched
+  public static final String FETCH_REQUEST_VERBATIM_KEY = "cc.request.verbatim";
 }

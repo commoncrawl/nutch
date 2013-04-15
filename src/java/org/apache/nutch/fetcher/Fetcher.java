@@ -703,15 +703,6 @@ public class Fetcher extends Configured implements Tool,
               ProtocolOutput output = protocol.getProtocolOutput(fit.url, fit.datum);
               fit.datum.getMetaData().put(new Text(Nutch.FETCH_DURATION_KEY), new Text(Long.toString(System.currentTimeMillis() - startTime)));
 
-              // Put this here instead of inside of the httpclient plugin because HttpClient doesn't let us
-              // access to the IP Address actually used by the socket anyway. This may return a different IP
-              // than was actually used for the connection :(
-              try {
-                URL u = new URL(fit.url.toString());
-                InetAddress ip = InetAddress.getByName(u.getHost());
-                fit.datum.getMetaData().put(new Text(Nutch.FETCH_DEST_IP_KEY), new Text(ip.toString()));
-              } catch (Throwable t) {}
-
               ProtocolStatus status = output.getStatus();
               Content content = output.getContent();
               ParseStatus pstatus = null;

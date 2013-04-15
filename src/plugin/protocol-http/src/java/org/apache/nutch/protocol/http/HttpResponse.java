@@ -31,6 +31,7 @@ import java.net.URL;
 // Nutch imports
 import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.nutch.metadata.Metadata;
+import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.metadata.SpellCheckedMetadata;
 import org.apache.nutch.net.protocols.HttpDateFormat;
 import org.apache.nutch.net.protocols.Response;
@@ -135,7 +136,10 @@ public class HttpResponse implements Response {
         reqStr.append("\r\n");
       }
       reqStr.append("\r\n");
-      
+
+      headers.set(Nutch.FETCH_DEST_IP_KEY, sockAddr.getAddress().getHostAddress());
+      headers.set(Nutch.FETCH_REQUEST_VERBATIM_KEY, reqStr.toString());
+
       byte[] reqBytes= reqStr.toString().getBytes();
 
       req.write(reqBytes);
