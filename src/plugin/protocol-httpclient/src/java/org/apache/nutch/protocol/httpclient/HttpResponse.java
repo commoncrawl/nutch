@@ -98,6 +98,16 @@ public class HttpResponse implements Response {
       for (int i = 0; i < heads.length; i++) {
         headers.set(heads[i].getName(), heads[i].getValue());
       }
+
+      // Ugly, but we need to save our request headers if we want to output WARC in case of cookies/referrers/IMS
+      heads = get.getRequestHeaders();
+      StringBuilder b = new StringBuilder();
+
+      for (int i = 0; i < heads.length; i++) {
+        b.append(heads[i].toString());
+      }
+
+      headers.set("X-Request-Headers", b.toString());
       
       // Limit download size
       int contentLength = Integer.MAX_VALUE;
