@@ -53,6 +53,7 @@ if [ $# = 0 ]; then
   echo "  readlinkdb        read / dump link db"
   echo "  inject            inject new urls into the database"
   echo "  generate          generate new segments to fetch from crawl db"
+  echo "  generate2          generate new segments to fetch from crawl db (not total ordered)"
   echo "  freegen           generate new segments to fetch from text files"
   echo "  fetch             fetch a segment's pages"
   echo "  parse             parse a segment's pages"
@@ -198,6 +199,8 @@ elif [ "$COMMAND" = "inject" ] ; then
   CLASS=org.apache.nutch.crawl.Injector
 elif [ "$COMMAND" = "generate" ] ; then
   CLASS=org.apache.nutch.crawl.Generator
+elif [ "$COMMAND" = "generate2" ] ; then
+  CLASS=org.apache.nutch.crawl.Generator2
 elif [ "$COMMAND" = "freegen" ] ; then
   CLASS=org.apache.nutch.tools.FreeGenerator
 elif [ "$COMMAND" = "fetch" ] ; then
