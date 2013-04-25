@@ -65,7 +65,7 @@ import org.apache.nutch.util.URLUtil;
  **/
 public class Generator2 extends Configured implements Tool {
 
-  public static final Logger LOG = LoggerFactory.getLogger(Generator.class);
+  public static final Logger LOG = LoggerFactory.getLogger(Generator2.class);
 
   public static final String GENERATE_UPDATE_CRAWLDB = "generate.update.crawldb";
   public static final String GENERATOR_MIN_SCORE = "generate.min.score";
@@ -320,7 +320,7 @@ public class Generator2 extends Configured implements Tool {
       if (intervalThreshold != -1 && crawlDatum.getFetchInterval() > intervalThreshold) return;
 
       String hostordomain = null;
-      String urlString = new String();
+      String urlString = key.toString();
       URL u = null;
 
       try {
@@ -608,7 +608,7 @@ public class Generator2 extends Configured implements Tool {
     LOG.info("Generator: filtering: " + filter);
     LOG.info("Generator: normalizing: " + norm);
     if (topN != Long.MAX_VALUE) {
-      LOG.info("Generator: topN: " + topN);
+      LOG.info("Generator: perSegment: " + topN);
     }
 
     if ("true".equals(getConf().get(GENERATE_MAX_PER_HOST_BY_IP))){
@@ -645,6 +645,7 @@ public class Generator2 extends Configured implements Tool {
 
     FileOutputFormat.setOutputPath(job, tempDir);
     job.setOutputFormat(SequenceFileOutputFormat.class);
+    job.setMapOutputKeyClass(DomainScorePair.class);
     job.setOutputKeyClass(FloatWritable.class);
     job.setOutputKeyComparatorClass(ScoreComparator.class);
     job.setOutputValueGroupingComparator(DomainComparator.class);
@@ -774,7 +775,7 @@ public class Generator2 extends Configured implements Tool {
    * Generate a fetchlist from the crawldb.
    */
   public static void main(String args[]) throws Exception {
-    int res = ToolRunner.run(NutchConfiguration.create(), new Generator(), args);
+    int res = ToolRunner.run(NutchConfiguration.create(), new Generator2(), args);
     System.exit(res);
   }
 
