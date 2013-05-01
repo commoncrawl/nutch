@@ -492,7 +492,7 @@ public class Generator extends Configured implements Tool {
       throws IOException {
 
     Path tempDir = new Path(getConf().get("mapred.temp.dir", ".") + "/generate-temp-"
-        + System.currentTimeMillis());
+        + java.util.UUID.randomUUID().toString());
 
     Path lock = new Path(dbDir, CrawlDb.LOCK_NAME);
     FileSystem fs = lock.getFileSystem(getConf());
@@ -583,7 +583,7 @@ public class Generator extends Configured implements Tool {
     if (getConf().getBoolean(GENERATE_UPDATE_CRAWLDB, false)) {
       // update the db from tempDir
       Path tempDir2 = new Path(getConf().get("mapred.temp.dir", ".") + "/generate-temp-"
-          + System.currentTimeMillis());
+          + java.util.UUID.randomUUID().toString());
 
       job = new NutchJob(getConf());
       job.setJobName("generate: updatedb " + dbDir);

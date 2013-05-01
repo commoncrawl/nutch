@@ -2,6 +2,18 @@ Nutch Change Log
 
 (trunk): Current Development
 
+* NUTCH-1334 NPE in FetcherOutputFormat (jnioche via tejasp)
+
+* NUTCH-1549 Fix deprecated use of Tika MimeType API in o.a.n.util.MimeUtil (tejasp)
+
+* NUTCH-346 Improve readability of logs/hadoop.log (Renaud Richardet via tejasp)
+
+* NUTCH-829 duplicate hadoop temp files (Mike Baranczak, lewismc, tejasp)
+
+* NUTCH-1501 Harmonize behavior of parsechecker and indexchecker (snagel + lewismc)
+
+* NUTCH-1031 Delegate parsing of robots.txt to crawler-commons (tejasp)
+
 * NUTCH-1547 BasicIndexingFilter - Problem to index full title (Feng)
 
 * NUTCH-1389 parsechecker and indexchecker to report truncated content (snagel)
