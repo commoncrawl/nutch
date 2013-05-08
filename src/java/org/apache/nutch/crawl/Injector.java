@@ -93,13 +93,13 @@ public class Injector extends Configured implements Tool {
           return;
       }
 
-      // if tabs : metadata that could be stored
-      // must be name=value and separated by \t
+      // if tabs or spaces : metadata that could be stored
+      // must be name=value and separated by \t or \s
       float customScore = -1f;
       int customInterval = interval;
       int fixedInterval = -1;
       Map<String,String> metadata = new TreeMap<String,String>();
-      if (url.indexOf("\t")!=-1){
+      if (url.indexOf("\t")!=-1 || url.indexOf(" ")!=-1){
     	  String[] splits = url.split("[\t|\\s]");
     	  url = splits[0];
     	  for (int s=1;s<splits.length;s++){

@@ -122,7 +122,6 @@ public class Generator2 extends Configured implements Tool {
 
     @Override
     public boolean equals(Object right) {
-      LOG.info("equals");
       if (right instanceof DomainScorePair) {
         DomainScorePair r = (DomainScorePair) right;
         return r.domain == domain && r.score == score;
