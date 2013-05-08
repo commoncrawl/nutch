@@ -168,8 +168,12 @@ public class Generator2 extends Configured implements Tool {
       super(DomainScorePair.class, true);
     }
 
+    // Some versions of hadoop don't seem to have a FloatWritable.compareTo
+    // also inverted for descending order
     public int compare(DomainScorePair a, DomainScorePair b) {
-      return b.getScore().compareTo(a.getScore());
+      float af = a.getScore().get();
+      float bf = b.getScore().get();
+      return (bf < af ? -1 : (af==bf ? 0 : 1));
     }
 
     @Override
@@ -221,7 +225,6 @@ public class Generator2 extends Configured implements Tool {
     private long curTime;
     private long limit;
     private long count;
-    private HashMap<String,int[]> hostCounts = new HashMap<String,int[]>();
     private int segCounts[];
     private int maxCount;
     private boolean byDomain = false;
@@ -274,11 +277,13 @@ public class Generator2 extends Configured implements Tool {
                     OutputCollector<DomainScorePair,SelectorEntry> output, Reporter reporter)
         throws IOException {
       Text url = key;
+      String urlString = key.toString();
+
       if (filter) {
         // If filtering is on don't generate URLs that don't pass
         // URLFilters
         try {
-          if (filters.filter(url.toString()) == null) return;
+          if (filters.filter(urlString) == null) return;
         } catch (URLFilterException e) {
           if (LOG.isWarnEnabled()) {
             LOG.warn("Couldn't filter url: " + url + " (" + e.getMessage() + ")");
@@ -320,7 +325,6 @@ public class Generator2 extends Configured implements Tool {
       if (intervalThreshold != -1 && crawlDatum.getFetchInterval() > intervalThreshold) return;
 
       String hostordomain = null;
-      String urlString = key.toString();
       URL u = null;
 
       try {
@@ -332,7 +336,7 @@ public class Generator2 extends Configured implements Tool {
         if (byDomain) {
           hostordomain = URLUtil.getDomainName(u);
         } else {
-          hostordomain = new URL(urlString).getHost();
+          hostordomain = u.getHost();
         }
       } catch (Exception e) {
         LOG.warn("Malformed URL: '" + urlString + "', skipping ("
@@ -660,17 +664,17 @@ public class Generator2 extends Configured implements Tool {
 
     // read the subdirectories generated in the temp
     // output and turn them into segments
-    List<Path> generatedSegments = new ArrayList<Path>();
+    List<Path> generatedSegments;
 
-    FileStatus[] status = tempFs.listStatus(tempDir);
     try {
+      FileStatus[] status = tempFs.listStatus(tempDir);
+      List<Path> inputDirs = new ArrayList<Path>();
       for (FileStatus stat : status) {
         Path subfetchlist = stat.getPath();
         if (!subfetchlist.getName().startsWith("fetchlist-")) continue;
-        // start a new partition job for this segment
-        Path newSeg = partitionSegment(segments.getFileSystem(getConf()), segments, subfetchlist, numLists);
-        generatedSegments.add(newSeg);
+        inputDirs.add(subfetchlist);
       }
+      generatedSegments = partitionSegments(segments.getFileSystem(getConf()), segments, inputDirs, numLists);
     } catch (Exception e) {
       LOG.warn("Generator: exception while partitioning segments, exiting ...");
       tempFs.delete(tempDir, true);
@@ -726,39 +730,99 @@ public class Generator2 extends Configured implements Tool {
     return generatedSegments.toArray(patharray);
   }
 
-  private Path partitionSegment(FileSystem fs, Path segmentsDir, Path inputDir,
-                                int numLists) throws IOException {
-    // invert again, partition by host/domain/IP, sort by url hash
+  public static class QueuedJob {
+    private JobClient jc;
+    private NutchJob job;
+    private RunningJob rj;
+
+    public QueuedJob(NutchJob job, JobClient jc, RunningJob rj) {
+      this.job = job;
+      this.jc = jc;
+      this.rj = rj;
+    }
+
+    public void waitForCompletion() throws IOException {
+      rj.waitForCompletion();
+    }
+
+    public void monitorAndPrintJob() throws IOException {
+      try {
+        if (!jc.monitorAndPrintJob(job, rj)) {
+          throw new IOException("Job failed!");
+        }
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+      }
+    }
+
+    public void killJob() throws IOException {
+      rj.killJob();
+    }
+  }
+
+  private List<Path> partitionSegments(FileSystem fs, Path segmentsDir, List<Path> inputDirs, int numLists) throws IOException {
     if (LOG.isInfoEnabled()) {
       LOG.info("Generator: Partitioning selected urls for politeness.");
     }
-    Path segment = new Path(segmentsDir, generateSegmentName());
-    Path output = new Path(segment, CrawlDatum.GENERATE_DIR_NAME);
 
-    LOG.info("Generator: segment: " + segment);
+    List<Path> generatedSegments = new ArrayList<Path>();
+    List<QueuedJob> queuedJobs = new ArrayList<QueuedJob>();
 
-    NutchJob job = new NutchJob(getConf());
-    job.setJobName("generate: partition " + segment);
+    for (Path inputDir : inputDirs) {
+      Path segment = new Path(segmentsDir, generateSegmentName());
+      Path output = new Path(segment, CrawlDatum.GENERATE_DIR_NAME);
 
-    job.setInt("partition.url.seed", new Random().nextInt());
+      LOG.info("Generator: segment: " + segment);
 
-    FileInputFormat.addInputPath(job, inputDir);
-    job.setInputFormat(SequenceFileInputFormat.class);
+      NutchJob job = new NutchJob(getConf());
+      job.setJobName("generate: partition " + segment);
 
-    job.setMapperClass(SelectorInverseMapper.class);
-    job.setMapOutputKeyClass(Text.class);
-    job.setMapOutputValueClass(SelectorEntry.class);
-    job.setPartitionerClass(URLPartitioner.class);
-    job.setReducerClass(PartitionReducer.class);
-    job.setNumReduceTasks(numLists);
+      job.setInt("partition.url.seed", new Random().nextInt());
 
-    FileOutputFormat.setOutputPath(job, output);
-    job.setOutputFormat(SequenceFileOutputFormat.class);
-    job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(CrawlDatum.class);
-    job.setOutputKeyComparatorClass(HashComparator.class);
-    JobClient.runJob(job);
-    return segment;
+      FileInputFormat.addInputPath(job, inputDir);
+      job.setInputFormat(SequenceFileInputFormat.class);
+
+      job.setMapperClass(SelectorInverseMapper.class);
+      job.setMapOutputKeyClass(Text.class);
+      job.setMapOutputValueClass(SelectorEntry.class);
+      job.setPartitionerClass(URLPartitioner.class);
+      job.setReducerClass(PartitionReducer.class);
+      job.setNumReduceTasks(numLists);
+
+      FileOutputFormat.setOutputPath(job, output);
+      job.setOutputFormat(SequenceFileOutputFormat.class);
+      job.setOutputKeyClass(Text.class);
+      job.setOutputValueClass(CrawlDatum.class);
+      job.setOutputKeyComparatorClass(HashComparator.class);
+
+      JobClient jc = new JobClient(job);
+      RunningJob rj = jc.submitJob(job);
+      QueuedJob qj = new QueuedJob(job, jc, rj);
+      queuedJobs.add(qj);
+      generatedSegments.add(segment);
+    }
+
+    IOException caught = null;
+
+    // So they should all be queued and (possibly) running if we have slots free
+    try {
+      for (QueuedJob queued : queuedJobs) {
+        queued.monitorAndPrintJob();
+      }
+    } catch (IOException e) {
+      caught = e;
+    }
+
+    // Cancel all the jobs if we caught an exception
+    if (caught != null) {
+      for (QueuedJob queued : queuedJobs) {
+        try {
+          queued.killJob();
+        } catch (IOException e) {}
+      }
+    }
+
+    return generatedSegments;
   }
 
   private static SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
@@ -767,7 +831,7 @@ public class Generator2 extends Configured implements Tool {
     try {
       Thread.sleep(1000);
     } catch (Throwable t) {}
-    ;
+
     return sdf.format(new Date(System.currentTimeMillis()));
   }
 
@@ -782,7 +846,7 @@ public class Generator2 extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     if (args.length < 2) {
       System.out
-          .println("Usage: Generator2 <crawldb> <segments_dir> [-force] [-numPerSegment N] [-numFetchers numFetchers] [-adddays numDays] [-noFilter] [-noNorm][-maxNumSegments num]");
+          .println("Usage: Generator2 <crawldb> <segments_dir> [-force] [-numPerSegment N] [-numFetchers numFetchers] [-adddays numDays] [-noFilter] [-noNorm] [-maxNumSegments num]");
       return -1;
     }
 
