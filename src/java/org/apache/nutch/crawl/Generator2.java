@@ -122,6 +122,7 @@ public class Generator2 extends Configured implements Tool {
 
     @Override
     public boolean equals(Object right) {
+      LOG.info("equals");
       if (right instanceof DomainScorePair) {
         DomainScorePair r = (DomainScorePair) right;
         return r.domain == domain && r.score == score;
@@ -133,10 +134,10 @@ public class Generator2 extends Configured implements Tool {
     /* Sorts domain ascending, score in descending order */
     @Override
     public int compareTo(DomainScorePair o) {
-      if (!domain.equals(o.domain)) {
-        return domain.compareTo(domain);
-      } else if (!score.equals(o.score)) {
-        return score.compareTo(o.score) * -1;
+      if (!domain.equals(o.getDomain())) {
+        return domain.compareTo(o.getDomain());
+      } else if (!score.equals(o.getScore())) {
+        return o.getScore().compareTo(score);
       } else {
         return 0;
       }
@@ -171,9 +172,7 @@ public class Generator2 extends Configured implements Tool {
     // Some versions of hadoop don't seem to have a FloatWritable.compareTo
     // also inverted for descending order
     public int compare(DomainScorePair a, DomainScorePair b) {
-      float af = a.getScore().get();
-      float bf = b.getScore().get();
-      return (bf < af ? -1 : (af==bf ? 0 : 1));
+      return a.compareTo(b);
     }
 
     @Override
@@ -398,7 +397,7 @@ public class Generator2 extends Configured implements Tool {
 
           // reached the limit of allowed URLs per host / domain
           // see if we can put it in the next segment?
-          if (hostCount >= maxCount) {
+          if (hostCount > maxCount) {
             if (hostSegment < maxNumSegments) {
               hostSegment++;
               hostCount = 0;
