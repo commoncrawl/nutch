@@ -392,7 +392,7 @@ public class Generator2 extends Configured implements Tool {
           // check if topN reached, select next segment if it is
           while (segCounts[hostSegment-1] >= limit && hostSegment < maxNumSegments) {
             hostSegment++;
-            hostCount = 0;
+            hostCount = 1;
           }
 
           // reached the limit of allowed URLs per host / domain
@@ -400,7 +400,7 @@ public class Generator2 extends Configured implements Tool {
           if (hostCount > maxCount) {
             if (hostSegment < maxNumSegments) {
               hostSegment++;
-              hostCount = 0;
+              hostCount = 1;
             } else {
               if (hostCount == maxCount + 1 && LOG.isInfoEnabled()) {
                 LOG.info("Host or domain " + hostordomain + " has more than " + maxCount
