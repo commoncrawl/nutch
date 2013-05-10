@@ -30,7 +30,22 @@ import java.net.URI;
 import java.util.regex.Pattern;
 
 /**
- * Filters URLs based on a file of regular expressions and host/domains using the
+ * Filters URLs based on a file of regular expressions using host/domains matching
+ * first. Host-based rules are evaluated before domain-based rules, but otherwise should
+ * be checked in order. The default policy is to accept a URL if no matches are found.
+ *
+ * Rule Format:
+ *
+ * Host www.imdb.com
+ *   DenyPath /keyword/(?:.*?/){2,}  # permutation of keywords separated by /
+ *   DenyPath /some/other/path
+ *
+ * Domain gravatar.com
+ *   DenyPath .*     # Deny everything from *.gravatar.com and gravatar.com
+ *
+ * Domain myspace.com
+ *   DenyPathQuery /resource/.*?action=add
+ *
  * {@link java.util.regex Java Regex implementation}.
  */
 public class FastURLFilter implements URLFilter {
@@ -81,17 +96,6 @@ public class FastURLFilter implements URLFilter {
     return url;
   }
 
-  /* Format:
-     Host www.imdb.com
-         DenyPath /keyword/(?:.*?/){2,}  # permutation of keywords separated by /
-         DenyPath /some/other/path
-
-     Domain gravatar.com
-        DenyPath .*     # Deny everything from *.gravatar.com and gravatar.com
-
-     Domain myspace.com
-        DenyPathQuery /resource/.*?action=add
-   */
   public void reloadRules() {
     domainRules.clear();
     hostRules.clear();
@@ -99,12 +103,15 @@ public class FastURLFilter implements URLFilter {
     String fileRules = conf.get(URLFILTER_FAST_FILE);
     BufferedReader reader = new BufferedReader(conf.getConfResourceAsReader(fileRules));
 
+
     String current = null;
     boolean host = false;
+    int lineno = 0;
 
     String line;
     try {
       while((line = reader.readLine()) != null) {
+        lineno++;
         line = line.trim();
 
         if (line.indexOf("#") != -1) {
@@ -126,30 +133,32 @@ public class FastURLFilter implements URLFilter {
             continue;
           }
 
-          if (line.startsWith("DenyPath ")) {
-            String rule = line.split("\\s")[1];
-
-            if (host) {
-              hostRules.put(current, new DenyPathRule(rule));
+          Rule rule = null;
+          try {
+            if (line.startsWith("DenyPath ")) {
+              rule = new DenyPathRule(line.split("\\s")[1]);
+            } else if (line.startsWith("DenyPathQuery ")) {
+              rule = new DenyPathQueryRule(line.split("\\s")[1]);
             } else {
-              domainRules.put(current, new DenyPathRule(rule));
+              continue;
             }
-          } else if (line.startsWith("DenyPathQuery ")) {
-            String rule = line.split("\\s")[1];
+          } catch (IndexOutOfBoundsException e) {
+            LOG.warn("Problem reading rule on line " + lineno + ": " + line);
+          }
 
-            if (host) {
-              hostRules.put(current, new DenyPathQueryRule(rule));
-            } else {
-              domainRules.put(current, new DenyPathQueryRule(rule));
-            }
+          if (host) {
+            if (LOG.isTraceEnabled()) { LOG.trace("Adding host rule [" + current + "] [" + rule.toString() + "]"); }
+            hostRules.put(current,rule);
+          } else {
+            if (LOG.isTraceEnabled()) { LOG.trace("Adding domain rule [" + current + "] [" + rule.toString() + "]"); }
+            domainRules.put(current, rule);
           }
         }
       }
     } catch (IOException e) {
-      LOG.warn("Caught exception while reading rules file");
+      LOG.warn("Caught exception while reading rules file at line " + lineno);
     }
   }
-
 
   public static class Rule {
     protected Pattern pattern;
