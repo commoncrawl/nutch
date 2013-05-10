@@ -39,7 +39,6 @@ public class FastURLFilter implements URLFilter {
   public static final String URLFILTER_FAST_FILE = "urlfilter.fast.file";
   private Multimap<String, Rule> hostRules = LinkedHashMultimap.create();
   private Multimap<String, Rule> domainRules = LinkedHashMultimap.create();
-  int cnt = 0;
 
   public FastURLFilter() {}
 
