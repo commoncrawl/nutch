@@ -216,9 +216,9 @@ public class Generator2 extends Configured implements Tool {
 
   /** Selects entries due for fetch. */
   public static class Selector implements
-      Mapper<Text,CrawlDatum,DomainScorePair,SelectorEntry>,
-      Partitioner<DomainScorePair,Writable>,
-      Reducer<DomainScorePair,SelectorEntry,FloatWritable,SelectorEntry> {
+      Mapper<Text, CrawlDatum, DomainScorePair, SelectorEntry>,
+      Partitioner<DomainScorePair ,Writable>,
+      Reducer<DomainScorePair, SelectorEntry, FloatWritable, SelectorEntry> {
     private LongWritable genTime = new LongWritable(System.currentTimeMillis());
     private long curTime;
     private long limit;
@@ -272,7 +272,7 @@ public class Generator2 extends Configured implements Tool {
 
     /** Select & invert subset due for fetch. */
     public void map(Text key, CrawlDatum value,
-                    OutputCollector<DomainScorePair,SelectorEntry> output, Reporter reporter)
+                    OutputCollector<DomainScorePair, SelectorEntry> output, Reporter reporter)
         throws IOException {
       Text url = key;
       String urlString = key.toString();
@@ -361,7 +361,7 @@ public class Generator2 extends Configured implements Tool {
 
     /** Collect until limit is reached. */
     public void reduce(DomainScorePair key, Iterator<SelectorEntry> values,
-                       OutputCollector<FloatWritable,SelectorEntry> output, Reporter reporter)
+                       OutputCollector<FloatWritable, SelectorEntry> output, Reporter reporter)
         throws IOException {
 
       int hostCount = 0;
@@ -436,6 +436,32 @@ public class Generator2 extends Configured implements Tool {
 
   }
 
+
+  public static class Segmenter implements
+      Mapper<FloatWritable, SelectorEntry, IntWritable, SelectorEntry>,
+      Reducer<IntWritable, SelectorEntry, Text, SelectorEntry> {
+
+    public void close() {}
+
+    public void configure(JobConf job) {
+    }
+    public void map(FloatWritable key, SelectorEntry value,
+                    OutputCollector<IntWritable, SelectorEntry> output, Reporter reporter)
+        throws IOException {
+      SelectorEntry entry = value;
+      output.collect(value.segnum, entry);
+    }
+
+    public void reduce(IntWritable key, Iterator<SelectorEntry> values,
+                       OutputCollector<Text, SelectorEntry> output, Reporter reporter)
+        throws IOException {
+      while (values.hasNext()) {
+        SelectorEntry entry = values.next();
+        output.collect(entry.url, entry);
+      }
+    }
+  }
+
   public static class DecreasingFloatComparator extends FloatWritable.Comparator {
 
     /** Compares two FloatWritables decreasing. */
@@ -445,9 +471,9 @@ public class Generator2 extends Configured implements Tool {
   }
 
   public static class SelectorInverseMapper extends MapReduceBase implements
-      Mapper<FloatWritable,SelectorEntry,Text,SelectorEntry> {
+      Mapper<Text, SelectorEntry, Text, SelectorEntry> {
 
-    public void map(FloatWritable key, SelectorEntry value,
+    public void map(Text key, SelectorEntry value,
                     OutputCollector<Text,SelectorEntry> output, Reporter reporter) throws IOException {
       SelectorEntry entry = value;
       output.collect(entry.url, entry);
@@ -645,14 +671,39 @@ public class Generator2 extends Configured implements Tool {
     job.setPartitionerClass(Selector.class);
     job.setReducerClass(Selector.class);
 
-    FileOutputFormat.setOutputPath(job, tempDir);
+    Path stage1Dir = tempDir.suffix("stage1");
+    FileOutputFormat.setOutputPath(job, stage1Dir);
     job.setOutputFormat(SequenceFileOutputFormat.class);
     job.setMapOutputKeyClass(DomainScorePair.class);
     job.setOutputKeyClass(FloatWritable.class);
     job.setOutputKeyComparatorClass(ScoreComparator.class);
     job.setOutputValueGroupingComparator(DomainComparator.class);
     job.setOutputValueClass(SelectorEntry.class);
-    job.setOutputFormat(GeneratorOutputFormat.class);
+    // job.setOutputFormat(GeneratorOutputFormat.class);
+
+    try {
+      JobClient.runJob(job);
+    } catch (IOException e) {
+      throw e;
+    }
+
+    // Read through the generated URL list and output individual segment files
+    job = new NutchJob(getConf());
+    FileInputFormat.addInputPath(job, stage1Dir);
+    job.setInputFormat(SequenceFileInputFormat.class);
+
+    job.setMapperClass(Segmenter.class);
+    job.setReducerClass(Segmenter.class);
+
+    job.setMapOutputKeyClass(IntWritable.class);
+    job.setMapOutputValueClass(SelectorEntry.class);
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(SelectorEntry.class);
+
+    Path stage2Dir = tempDir.suffix("stage2");
+    FileOutputFormat.setOutputPath(job, stage2Dir);
+    job.setOutputFormat(SequenceFileOutputFormat.class);
+    job.setNumReduceTasks(maxNumSegments);
 
     try {
       JobClient.runJob(job);
@@ -665,7 +716,7 @@ public class Generator2 extends Configured implements Tool {
     List<Path> generatedSegments;
 
     try {
-      FileStatus[] status = tempFs.listStatus(tempDir);
+      FileStatus[] status = tempFs.listStatus(stage2Dir);
       List<Path> inputDirs = new ArrayList<Path>();
       for (FileStatus stat : status) {
         Path subfetchlist = stat.getPath();
