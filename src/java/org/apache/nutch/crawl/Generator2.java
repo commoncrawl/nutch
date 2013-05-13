@@ -427,9 +427,9 @@ public class Generator2 extends Configured implements Tool {
 
   // Allows the reducers to generate one subfile per
   public static class GeneratorOutputFormat extends
-      MultipleSequenceFileOutputFormat<FloatWritable,SelectorEntry> {
+      MultipleSequenceFileOutputFormat<Text, SelectorEntry> {
     // generate a filename based on the segnum stored for this entry
-    protected String generateFileNameForKeyValue(FloatWritable key, SelectorEntry value,
+    protected String generateFileNameForKeyValue(Text key, SelectorEntry value,
                                                  String name) {
       return "fetchlist-" + value.segnum.toString() + "/" + name;
     }
@@ -688,6 +688,7 @@ public class Generator2 extends Configured implements Tool {
 
     // Read through the generated URL list and output individual segment files
     job = new NutchJob(getConf());
+    job.setJobName("generate: segmenter");
     FileInputFormat.addInputPath(job, stage1Dir);
     job.setInputFormat(SequenceFileInputFormat.class);
 
