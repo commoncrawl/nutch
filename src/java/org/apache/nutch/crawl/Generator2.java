@@ -671,7 +671,7 @@ public class Generator2 extends Configured implements Tool {
     job.setPartitionerClass(Selector.class);
     job.setReducerClass(Selector.class);
 
-    Path stage1Dir = tempDir.suffix("stage1");
+    Path stage1Dir = tempDir.suffix("/stage1");
     FileOutputFormat.setOutputPath(job, stage1Dir);
     job.setOutputFormat(SequenceFileOutputFormat.class);
     job.setMapOutputKeyClass(DomainScorePair.class);
@@ -679,7 +679,6 @@ public class Generator2 extends Configured implements Tool {
     job.setOutputKeyComparatorClass(ScoreComparator.class);
     job.setOutputValueGroupingComparator(DomainComparator.class);
     job.setOutputValueClass(SelectorEntry.class);
-    // job.setOutputFormat(GeneratorOutputFormat.class);
 
     try {
       JobClient.runJob(job);
@@ -700,10 +699,11 @@ public class Generator2 extends Configured implements Tool {
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(SelectorEntry.class);
 
-    Path stage2Dir = tempDir.suffix("stage2");
+    Path stage2Dir = tempDir.suffix("/stage2");
     FileOutputFormat.setOutputPath(job, stage2Dir);
     job.setOutputFormat(SequenceFileOutputFormat.class);
     job.setNumReduceTasks(maxNumSegments);
+    job.setOutputFormat(GeneratorOutputFormat.class);
 
     try {
       JobClient.runJob(job);
