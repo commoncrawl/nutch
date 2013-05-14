@@ -440,10 +440,10 @@ public class Generator2 extends Configured implements Tool {
 
   }
 
-
   public static class Segmenter implements
       Mapper<FloatWritable, SelectorEntry, IntWritable, SelectorEntry>,
       Reducer<IntWritable, SelectorEntry, Text, SelectorEntry> {
+
 
     public void close() {}
 
@@ -453,7 +453,7 @@ public class Generator2 extends Configured implements Tool {
                     OutputCollector<IntWritable, SelectorEntry> output, Reporter reporter)
         throws IOException {
       SelectorEntry entry = value;
-      output.collect(value.segnum, entry);
+      output.collect(entry.segnum, entry);
     }
 
     public void reduce(IntWritable key, Iterator<SelectorEntry> values,
@@ -475,29 +475,40 @@ public class Generator2 extends Configured implements Tool {
   }
 
   public static class SelectorInverseMapper extends MapReduceBase implements
-      Mapper<Text, SelectorEntry, Text, SelectorEntry> {
+      Mapper<Text, SelectorEntry, Text, CrawlDatum> {
 
     public void map(Text key, SelectorEntry value,
-                    OutputCollector<Text,SelectorEntry> output, Reporter reporter) throws IOException {
+                    OutputCollector<Text,CrawlDatum> output, Reporter reporter) throws IOException {
       SelectorEntry entry = value;
-      output.collect(entry.url, entry);
+      output.collect(entry.url, entry.datum);
     }
   }
 
-  public static class PartitionReducer extends MapReduceBase implements
-      Reducer<Text,SelectorEntry,Text,CrawlDatum> {
+  public static class PartitionOutputter
+      extends MultipleSequenceFileOutputFormat<Text, CrawlDatum> {
+    private int numLists = 1;
+    URLPartitioner partitioner = new URLPartitioner();
 
-    public void reduce(Text key, Iterator<SelectorEntry> values,
-                       OutputCollector<Text,CrawlDatum> output, Reporter reporter) throws IOException {
-      // if using HashComparator, we get only one input key in case of
-      // hash collision
-      // so use only URLs from values
-      while (values.hasNext()) {
-        SelectorEntry entry = values.next();
-        output.collect(entry.url, entry.datum);
-      }
+    @Override
+    protected String generateFileNameForKeyValue(Text key,
+                                                 CrawlDatum value,
+                                                 String inputfilename) {
+
+      int partition = partitioner.getPartition(key, value, numLists);
+      return "subfetchlist-" + partition;
     }
 
+    @Override
+    public RecordWriter<Text, CrawlDatum> getRecordWriter(FileSystem fs,
+                                                     JobConf job,
+                                                     String name,
+                                                     Progressable arg3)
+        throws IOException {
+      numLists = job.getInt("num.lists", 1);
+      partitioner.configure(job);
+
+      return super.getRecordWriter(fs, job, name, arg3);
+    }
   }
 
   /** Sort fetch lists by hash of URL. */
@@ -706,7 +717,7 @@ public class Generator2 extends Configured implements Tool {
 
     Path stage2Dir = tempDir.suffix("/stage2");
     FileOutputFormat.setOutputPath(job, stage2Dir);
-    job.setOutputFormat(SequenceFileOutputFormat.class);
+    //job.setOutputFormat(SequenceFileOutputFormat.class);
     job.setNumReduceTasks(maxNumSegments);
     job.setOutputFormat(GeneratorOutputFormat.class);
 
@@ -836,15 +847,18 @@ public class Generator2 extends Configured implements Tool {
       FileInputFormat.addInputPath(job, inputDir);
       job.setInputFormat(SequenceFileInputFormat.class);
 
+      job.setSpeculativeExecution(false);
+      job.setMapSpeculativeExecution(false);
       job.setMapperClass(SelectorInverseMapper.class);
       job.setMapOutputKeyClass(Text.class);
       job.setMapOutputValueClass(SelectorEntry.class);
-      job.setPartitionerClass(URLPartitioner.class);
-      job.setReducerClass(PartitionReducer.class);
-      job.setNumReduceTasks(numLists);
+      job.setInt("num.lists", numLists);
+
+      job.setNumMapTasks(1);
+      job.setNumReduceTasks(0);
 
       FileOutputFormat.setOutputPath(job, output);
-      job.setOutputFormat(SequenceFileOutputFormat.class);
+      job.setOutputFormat(PartitionOutputter.class);
       job.setOutputKeyClass(Text.class);
       job.setOutputValueClass(CrawlDatum.class);
       job.setOutputKeyComparatorClass(HashComparator.class);
@@ -878,23 +892,13 @@ public class Generator2 extends Configured implements Tool {
       }
     }
 
-    IOException caught = null;
 
     // So they should all be queued and (possibly) running if we have slots free
-    try {
-      for (QueuedJob queued : queuedJobs) {
+    for (QueuedJob queued : queuedJobs) {
+      try {
         queued.monitorAndPrintJob();
-      }
-    } catch (IOException e) {
-      caught = e;
-    }
-
-    // Cancel all the jobs if we caught an exception
-    if (caught != null) {
-      for (QueuedJob queued : queuedJobs) {
-        try {
-          queued.killJob();
-        } catch (IOException e) {}
+      } catch (IOException e) {
+        queued.killJob();
       }
     }
 
