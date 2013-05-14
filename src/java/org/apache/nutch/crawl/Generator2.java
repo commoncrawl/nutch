@@ -375,7 +375,7 @@ public class Generator2 extends Configured implements Tool {
             currentsegmentnum++;
           } else {
             reporter.getCounter("Generator", "OVERFLOWED_ALL_SEGMENTS").increment(1);
-            break;
+            continue;
           }
         }
 
@@ -409,8 +409,7 @@ public class Generator2 extends Configured implements Tool {
                     + " URLs for all " + maxNumSegments + " segments. Additional URLs won't be included in the fetchlist.");
               }
               reporter.getCounter("Generator", "TOO_MANY_FROM_HOST").increment(1);
-              // skip the rest from this host
-              break;
+              continue;
             }
           }
           entry.segnum = new IntWritable(hostSegment);
