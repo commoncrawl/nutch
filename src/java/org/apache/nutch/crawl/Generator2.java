@@ -373,7 +373,10 @@ public class Generator2 extends Configured implements Tool {
           if (currentsegmentnum < maxNumSegments) {
             count = 0;
             currentsegmentnum++;
-          } else break;
+          } else {
+            reporter.getCounter("Generator", "OVERFLOWED_ALL_SEGMENTS").increment(1);
+            break;
+          }
         }
 
         SelectorEntry entry = values.next();
@@ -405,8 +408,9 @@ public class Generator2 extends Configured implements Tool {
                 LOG.info("Host or domain " + hostordomain + " has more than " + maxCount
                     + " URLs for all " + maxNumSegments + " segments. Additional URLs won't be included in the fetchlist.");
               }
-              // skip this entry
-              continue;
+              reporter.getCounter("Generator", "TOO_MANY_FROM_HOST").increment(1);
+              // skip the rest from this host
+              break;
             }
           }
           entry.segnum = new IntWritable(hostSegment);
@@ -850,6 +854,28 @@ public class Generator2 extends Configured implements Tool {
       QueuedJob qj = new QueuedJob(job, jc, rj);
       queuedJobs.add(qj);
       generatedSegments.add(segment);
+
+      if (queuedJobs.size() % 20 == 0) {
+        while (true) {
+          int numQueued = 0;
+
+          for (JobStatus status : jc.getAllJobs()) {
+            int runstate = status.getRunState();
+            if (runstate == JobStatus.PREP || runstate == JobStatus.RUNNING) {
+              numQueued++;
+            }
+          }
+
+          if (numQueued >= 20) {
+            try {
+              LOG.info("Queued up too many tasks, sleeping for 10 seconds");
+              Thread.sleep(10000);
+            } catch (Throwable t) {}
+          } else {
+            break;
+          }
+        }
+      }
     }
 
     IOException caught = null;
