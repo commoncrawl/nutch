@@ -241,6 +241,7 @@ public class Generator2 extends Configured implements Tool {
     private String restrictStatus = null;
     private int maxNumSegments = 1;
     int currentsegmentnum = 1;
+    private DomainScorePair outputKey = new DomainScorePair();
 
     public void configure(JobConf job) {
       curTime = job.getLong(GENERATOR_CUR_TIME, System.currentTimeMillis());
@@ -324,15 +325,14 @@ public class Generator2 extends Configured implements Tool {
       // consider only entries with a retry (or fetch) interval lower than threshold
       if (intervalThreshold != -1 && crawlDatum.getFetchInterval() > intervalThreshold) return;
 
-      String hostordomain = null;
-      URL u = null;
+      String hostordomain;
 
       try {
         if (normalise && normalizers != null) {
           urlString = normalizers.normalize(urlString,
               URLNormalizers.SCOPE_GENERATE_HOST_COUNT);
         }
-        u = new URL(urlString);
+        URL u = new URL(urlString);
         if (byDomain) {
           hostordomain = URLUtil.getDomainName(u);
         } else {
@@ -346,7 +346,6 @@ public class Generator2 extends Configured implements Tool {
       }
 
       hostordomain = hostordomain.toLowerCase();
-      DomainScorePair outputKey = new DomainScorePair();
       outputKey.set(hostordomain, sort);
 
       // record generation time
