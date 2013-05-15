@@ -82,6 +82,8 @@ public class Generator2 extends Configured implements Tool {
   public static final String GENERATOR_DELAY = "crawl.gen.delay";
   public static final String GENERATOR_MAX_NUM_SEGMENTS = "generate.max.num.segments";
 
+  protected static Random random = new Random();
+
   // deprecated parameters
   public static final String GENERATE_MAX_PER_HOST_BY_IP = "generate.max.per.host.by.ip";
   public static final String GENERATE_MAX_PER_HOST = "generate.max.per.host";
@@ -367,6 +369,7 @@ public class Generator2 extends Configured implements Tool {
       int hostCount = 0;
       int hostSegment = 1;
       while (values.hasNext()) {
+        SelectorEntry entry = values.next();
 
         if (count == limit) {
           // do we have any segments left?
@@ -379,7 +382,6 @@ public class Generator2 extends Configured implements Tool {
           }
         }
 
-        SelectorEntry entry = values.next();
         Text url = entry.url;
         String urlString = url.toString();
         URL u = null;
@@ -487,6 +489,8 @@ public class Generator2 extends Configured implements Tool {
       extends MultipleSequenceFileOutputFormat<Text, CrawlDatum> {
     private int numLists = 1;
     URLPartitioner partitioner = new URLPartitioner();
+    int mapno = 0;
+    long currentTime = System.currentTimeMillis();
 
     @Override
     protected String generateFileNameForKeyValue(Text key,
@@ -494,7 +498,7 @@ public class Generator2 extends Configured implements Tool {
                                                  String inputfilename) {
 
       int partition = partitioner.getPartition(key, value, numLists);
-      return "subfetchlist-" + partition;
+      return "" + currentTime + "." + mapno + "/" + CrawlDatum.GENERATE_DIR_NAME + "/subfetchlist-" + partition;
     }
 
     @Override
@@ -503,6 +507,8 @@ public class Generator2 extends Configured implements Tool {
                                                      String name,
                                                      Progressable arg3)
         throws IOException {
+      mapno = job.getInt(JobContext.TASK_PARTITION, random.nextInt(Integer.MAX_VALUE));
+
       numLists = job.getInt("num.lists", 1);
       partitioner.configure(job);
 
@@ -745,45 +751,6 @@ public class Generator2 extends Configured implements Tool {
       return null;
     }
 
-    if (generatedSegments.size() == 0) {
-      LOG.warn("Generator: 0 records selected for fetching, exiting ...");
-      LockUtil.removeLockFile(fs, lock);
-      tempFs.delete(tempDir, true);
-      return null;
-    }
-
-    if (getConf().getBoolean(GENERATE_UPDATE_CRAWLDB, false)) {
-      // update the db from tempDir
-      Path tempDir2 = new Path(getConf().get("mapred.temp.dir", ".") + "/generate-temp-"
-          + System.currentTimeMillis());
-
-      job = new NutchJob(getConf());
-      job.setJobName("generate: updatedb " + dbDir);
-      job.setLong(Nutch.GENERATE_TIME_KEY, generateTime);
-      for (Path segmpaths : generatedSegments) {
-        Path subGenDir = new Path(segmpaths, CrawlDatum.GENERATE_DIR_NAME);
-        FileInputFormat.addInputPath(job, subGenDir);
-      }
-      FileInputFormat.addInputPath(job, new Path(dbDir, CrawlDb.CURRENT_NAME));
-      job.setInputFormat(SequenceFileInputFormat.class);
-      job.setMapperClass(CrawlDbUpdater.class);
-      job.setReducerClass(CrawlDbUpdater.class);
-      job.setOutputFormat(MapFileOutputFormat.class);
-      job.setOutputKeyClass(Text.class);
-      job.setOutputValueClass(CrawlDatum.class);
-      FileOutputFormat.setOutputPath(job, tempDir2);
-      try {
-        JobClient.runJob(job);
-        CrawlDb.install(job, dbDir);
-      } catch (IOException e) {
-        LockUtil.removeLockFile(fs, lock);
-        tempFs.delete(tempDir, true);
-        tempFs.delete(tempDir2, true);
-        throw e;
-      }
-      tempFs.delete(tempDir2, true);
-    }
-
     LockUtil.removeLockFile(fs, lock);
     tempFs.delete(tempDir, true);
 
@@ -794,111 +761,45 @@ public class Generator2 extends Configured implements Tool {
     return generatedSegments.toArray(patharray);
   }
 
-  public static class QueuedJob {
-    private JobClient jc;
-    private NutchJob job;
-    private RunningJob rj;
-
-    public QueuedJob(NutchJob job, JobClient jc, RunningJob rj) {
-      this.job = job;
-      this.jc = jc;
-      this.rj = rj;
-    }
-
-    public void waitForCompletion() throws IOException {
-      rj.waitForCompletion();
-    }
-
-    public void monitorAndPrintJob() throws IOException {
-      try {
-        if (!jc.monitorAndPrintJob(job, rj)) {
-          throw new IOException("Job failed!");
-        }
-      } catch (InterruptedException ie) {
-        Thread.currentThread().interrupt();
-      }
-    }
-
-    public void killJob() throws IOException {
-      rj.killJob();
-    }
-  }
-
   private List<Path> partitionSegments(FileSystem fs, Path segmentsDir, List<Path> inputDirs, int numLists) throws IOException {
     if (LOG.isInfoEnabled()) {
       LOG.info("Generator: Partitioning selected urls for politeness.");
     }
 
     List<Path> generatedSegments = new ArrayList<Path>();
-    List<QueuedJob> queuedJobs = new ArrayList<QueuedJob>();
 
-    for (Path inputDir : inputDirs) {
-      Path segment = new Path(segmentsDir, generateSegmentName());
-      Path output = new Path(segment, CrawlDatum.GENERATE_DIR_NAME);
+    LOG.info("Generator: partitionSegment: " + segmentsDir);
 
-      LOG.info("Generator: segment: " + segment);
+    NutchJob job = new NutchJob(getConf());
+    job.setJobName("generate: partition " + segmentsDir);
 
-      NutchJob job = new NutchJob(getConf());
-      job.setJobName("generate: partition " + segment);
+    job.setInt("partition.url.seed", new Random().nextInt());
 
-      job.setInt("partition.url.seed", new Random().nextInt());
-
-      FileInputFormat.addInputPath(job, inputDir);
-      job.setInputFormat(SequenceFileInputFormat.class);
-
-      job.setSpeculativeExecution(false);
-      job.setMapSpeculativeExecution(false);
-      job.setMapperClass(SelectorInverseMapper.class);
-      job.setMapOutputKeyClass(Text.class);
-      job.setMapOutputValueClass(SelectorEntry.class);
-      job.setInt("num.lists", numLists);
-
-      job.setNumMapTasks(1);
-      job.setNumReduceTasks(0);
-
-      FileOutputFormat.setOutputPath(job, output);
-      job.setOutputFormat(PartitionOutputter.class);
-      job.setOutputKeyClass(Text.class);
-      job.setOutputValueClass(CrawlDatum.class);
-      job.setOutputKeyComparatorClass(HashComparator.class);
-
-      JobClient jc = new JobClient(job);
-      RunningJob rj = jc.submitJob(job);
-      QueuedJob qj = new QueuedJob(job, jc, rj);
-      queuedJobs.add(qj);
-      generatedSegments.add(segment);
-
-      if (queuedJobs.size() % 20 == 0) {
-        while (true) {
-          int numQueued = 0;
-
-          for (JobStatus status : jc.getAllJobs()) {
-            int runstate = status.getRunState();
-            if (runstate == JobStatus.PREP || runstate == JobStatus.RUNNING) {
-              numQueued++;
-            }
-          }
-
-          if (numQueued >= 20) {
-            try {
-              LOG.info("Queued up too many tasks, sleeping for 10 seconds");
-              Thread.sleep(10000);
-            } catch (Throwable t) {}
-          } else {
-            break;
-          }
-        }
-      }
+    for (Path p : inputDirs) {
+      FileInputFormat.addInputPath(job, p);
     }
+    job.setInputFormat(SequenceFileInputFormat.class);
 
+    job.setSpeculativeExecution(false);
+    job.setMapSpeculativeExecution(false);
+    job.setMapperClass(SelectorInverseMapper.class);
+    job.setMapOutputKeyClass(Text.class);
+    job.setMapOutputValueClass(SelectorEntry.class);
+    job.setLong("mapred.min.split.size", Long.MAX_VALUE);
+    job.setInt("num.lists", numLists);
 
-    // So they should all be queued and (possibly) running if we have slots free
-    for (QueuedJob queued : queuedJobs) {
-      try {
-        queued.monitorAndPrintJob();
-      } catch (IOException e) {
-        queued.killJob();
-      }
+    job.setNumReduceTasks(0);
+
+    FileOutputFormat.setOutputPath(job, segmentsDir);
+    job.setOutputFormat(PartitionOutputter.class);
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(CrawlDatum.class);
+    job.setOutputKeyComparatorClass(HashComparator.class);
+
+    try {
+      JobClient.runJob(job);
+    } catch (IOException e) {
+      throw e;
     }
 
     return generatedSegments;
