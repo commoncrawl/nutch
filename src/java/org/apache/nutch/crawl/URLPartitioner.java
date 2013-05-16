@@ -22,6 +22,8 @@ import java.net.URL;
 import java.net.MalformedURLException;
 import java.net.UnknownHostException;
 
+import org.apache.hadoop.util.hash.Hash;
+import org.apache.hadoop.util.hash.MurmurHash;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.io.*;
@@ -45,6 +47,7 @@ public class URLPartitioner implements Partitioner<Text,Writable> {
   private int seed;
   private URLNormalizers normalizers;
   private String mode = PARTITION_MODE_HOST;
+  private MurmurHash hasher = new MurmurHash();
 
   public void configure(JobConf job) {
     seed = job.getInt("partition.url.seed", 0);
@@ -60,32 +63,38 @@ public class URLPartitioner implements Partitioner<Text,Writable> {
 
   public void close() {}
 
-  /** Hash by domain name. */
+  /** Hash by domain name
+   *
+   * Note: we use a MurmurHash because domain hashCodes have an extremely poor distribution of lower bits
+   */
   public int getPartition(Text key, Writable value, int numReduceTasks) {
     String urlString = key.toString();
     URL url = null;
-    int hashCode = urlString.hashCode();
+    byte[] bytesToHash = null;
+    int hashCode;
+
     try {
       urlString = normalizers.normalize(urlString, URLNormalizers.SCOPE_PARTITION);
       url = new URL(urlString);
-      hashCode = url.getHost().hashCode();
     } catch (MalformedURLException e) {
       LOG.warn("Malformed URL: '" + urlString + "'");
+      bytesToHash = urlString.getBytes();
     }
 
-    if (mode.equals(PARTITION_MODE_DOMAIN) && url != null) hashCode = URLUtil
-        .getDomainName(url).hashCode();
-    else if (mode.equals(PARTITION_MODE_IP)) {
+    if (mode.equals(PARTITION_MODE_DOMAIN) && url != null) {
+      bytesToHash = URLUtil.getDomainName(url).getBytes();
+    } else if (mode.equals(PARTITION_MODE_IP)) {
       try {
         InetAddress address = InetAddress.getByName(url.getHost());
-        hashCode = address.getHostAddress().hashCode();
+        bytesToHash = address.getAddress();
       } catch (UnknownHostException e) {
         Generator.LOG.info("Couldn't find IP for host: " + url.getHost());
       }
+    } else {
+      bytesToHash = url.getHost().getBytes();
     }
 
-    // make hosts wind up in different partitions on different runs
-    hashCode ^= seed;
+    hashCode = hasher.hash(bytesToHash, bytesToHash.length, seed);
 
     return (hashCode & Integer.MAX_VALUE) % numReduceTasks;
   }
