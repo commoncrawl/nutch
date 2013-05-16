@@ -42,7 +42,6 @@ import org.apache.nutch.net.URLFilters;
 import org.apache.nutch.net.URLNormalizers;
 import org.apache.nutch.scoring.ScoringFilterException;
 import org.apache.nutch.scoring.ScoringFilters;
-import org.apache.nutch.util.LockUtil;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
 import org.apache.nutch.util.TimingUtil;
@@ -627,7 +626,7 @@ public class Generator2 extends Configured implements Tool {
 
     Path stage2Dir = tempDir.suffix("/stage2");
     FileOutputFormat.setOutputPath(job, stage2Dir);
-    job.setNumReduceTasks(maxNumSegments);
+    //job.setNumReduceTasks(maxNumSegments);
     job.setOutputFormat(GeneratorOutputFormat.class);
 
     try {
