@@ -479,28 +479,6 @@ public class Generator2 extends Configured implements Tool {
     }
   }
 
-  public class NullOutputCommitter extends OutputCommitter {
-    @Override
-    public void abortTask(TaskAttemptContext arg0) throws IOException {}
-
-    @Override
-    public void cleanupJob(JobContext arg0) throws IOException {}
-
-    @Override
-    public void commitTask(TaskAttemptContext arg0) throws IOException {}
-
-    @Override
-    public boolean needsTaskCommit(TaskAttemptContext arg0) throws IOException {
-      return false;
-    }
-
-    @Override
-    public void setupJob(JobContext arg0) throws IOException {}
-
-    @Override
-    public void setupTask(TaskAttemptContext arg0) throws IOException {}
-  }
-
   /** Sort fetch lists by hash of URL. */
   public static class HashComparator extends WritableComparator {
     public HashComparator() {

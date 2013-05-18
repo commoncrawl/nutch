@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
 // Slf4j Logging imports
 import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
 import org.apache.nutch.crawl.Generator2;
+import org.apache.nutch.crawl.NullOutputCommitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1345,7 +1346,7 @@ public class Fetcher extends Configured implements Tool,
     // S3 driver does an MD5 verification after uploading
     // Also, this is painfully slow because of S3's slow copy functions
     if (segment.getFileSystem(getConf()) instanceof NativeS3FileSystem) {
-      job.setOutputCommitter(Generator2.NullOutputCommitter.class);
+      job.setOutputCommitter(NullOutputCommitter.class);
     }
 
     JobClient.runJob(job);
