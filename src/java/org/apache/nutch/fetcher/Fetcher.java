@@ -1259,6 +1259,8 @@ public class Fetcher extends Configured implements Tool,
             if (hitByThrougputThreshold != 0) reporter.incrCounter("FetcherStatus",
               "hitByThrougputThreshold", hitByThrougputThreshold);
           }
+        } else if (throughputThresholdNumRetries > 0) {
+          throughputThresholdNumRetries--;
         }
       }
 
