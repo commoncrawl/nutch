@@ -23,6 +23,7 @@ import java.util.*;
 import java.text.*;
 
 // rLogging imports
+import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
 import org.apache.hadoop.util.hash.MurmurHash;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -478,6 +479,28 @@ public class Generator2 extends Configured implements Tool {
     }
   }
 
+  public class NullOutputCommitter extends OutputCommitter {
+    @Override
+    public void abortTask(TaskAttemptContext arg0) throws IOException {}
+
+    @Override
+    public void cleanupJob(JobContext arg0) throws IOException {}
+
+    @Override
+    public void commitTask(TaskAttemptContext arg0) throws IOException {}
+
+    @Override
+    public boolean needsTaskCommit(TaskAttemptContext arg0) throws IOException {
+      return false;
+    }
+
+    @Override
+    public void setupJob(JobContext arg0) throws IOException {}
+
+    @Override
+    public void setupTask(TaskAttemptContext arg0) throws IOException {}
+  }
+
   /** Sort fetch lists by hash of URL. */
   public static class HashComparator extends WritableComparator {
     public HashComparator() {
@@ -537,7 +560,7 @@ public class Generator2 extends Configured implements Tool {
    *           When an I/O error occurs
    */
   public Path[] generate(Path dbDir, Path segments, int numLists, long topN, long curTime, boolean filter,
-                         boolean norm, boolean force, int maxNumSegments, boolean keep)
+                         boolean norm, boolean force, int maxNumSegments, boolean keep, String stage2)
       throws IOException {
 
     Path tempDir = new Path(getConf().get("mapred.temp.dir", ".") + "/generate-temp-"
@@ -546,6 +569,7 @@ public class Generator2 extends Configured implements Tool {
     Path lock = new Path(dbDir, CrawlDb.LOCK_NAME);
     FileSystem fs = lock.getFileSystem(getConf());
     FileSystem tempFs = tempDir.getFileSystem(getConf());
+    Path stage2Dir;
 
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     long start = System.currentTimeMillis();
@@ -561,83 +585,85 @@ public class Generator2 extends Configured implements Tool {
       LOG.info("Generator: GENERATE_MAX_PER_HOST_BY_IP will be ignored, use partition.url.mode instead");
     }
 
-    // map to inverted subset due for fetch, sort by score
-    JobConf job = new NutchJob(getConf());
-    job.setJobName("generate: select from " + dbDir);
+    if (stage2 == null) {
+      // map to inverted subset due for fetch, sort by score
+      JobConf job = new NutchJob(getConf());
+      job.setJobName("generate: select from " + dbDir);
 
-    if (numLists == -1) { // for politeness make
-      numLists = job.getNumMapTasks(); // a partition per fetch task
-    }
-    if ("local".equals(job.get("mapred.job.tracker")) && numLists != 1) {
-      // override
-      LOG.info("Generator: jobtracker is 'local', generating exactly one partition.");
-      numLists = 1;
-    }
-    job.setLong(GENERATOR_CUR_TIME, curTime);
-    // record real generation time
-    long generateTime = System.currentTimeMillis();
-    job.setLong(Nutch.GENERATE_TIME_KEY, generateTime);
-    job.setBoolean(GENERATOR_FILTER, filter);
-    job.setBoolean(GENERATOR_NORMALISE, norm);
-    job.setInt(GENERATOR_MAX_NUM_SEGMENTS, maxNumSegments);
-    job.setInt("partition.url.seed", new Random().nextInt());
-
-    FileInputFormat.addInputPath(job, new Path(dbDir, CrawlDb.CURRENT_NAME));
-    job.setInputFormat(SequenceFileInputFormat.class);
-
-    job.setMapperClass(Selector.class);
-    job.setPartitionerClass(Selector.class);
-    job.setReducerClass(Selector.class);
-
-    Path stage1Dir = tempDir.suffix("/stage1");
-    FileOutputFormat.setOutputPath(job, stage1Dir);
-    job.setOutputFormat(SequenceFileOutputFormat.class);
-    job.setMapOutputKeyClass(DomainScorePair.class);
-    job.setOutputKeyClass(FloatWritable.class);
-    job.setOutputKeyComparatorClass(ScoreComparator.class);
-    job.setOutputValueGroupingComparator(DomainComparator.class);
-    job.setOutputValueClass(SelectorEntry.class);
-
-    try {
-      JobClient.runJob(job);
-    } catch (IOException e) {
-      if (!keep) {
-        tempFs.delete(tempDir, true);
+      if (numLists == -1) { // for politeness make
+        numLists = job.getNumMapTasks(); // a partition per fetch task
       }
-      throw e;
-    }
-
-    // Read through the generated URL list and output individual segment files
-    job = new NutchJob(getConf());
-    job.setJobName("generate: segmenter");
-    job.setInt(GENERATOR_MAX_NUM_SEGMENTS, maxNumSegments);
-    job.setLong(GENERATOR_TOP_N, topN);
-
-    FileInputFormat.addInputPath(job, stage1Dir);
-    job.setInputFormat(SequenceFileInputFormat.class);
-
-    job.setMapperClass(Segmenter.class);
-    job.setReducerClass(Segmenter.class);
-
-    job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(SelectorEntry.class);
-    job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(SelectorEntry.class);
-
-    Path stage2Dir = tempDir.suffix("/stage2");
-    FileOutputFormat.setOutputPath(job, stage2Dir);
-    //job.setNumReduceTasks(maxNumSegments);
-    job.setOutputFormat(GeneratorOutputFormat.class);
-
-    try {
-      JobClient.runJob(job);
-    } catch (IOException e) {
-      if (!keep) {
-        tempFs.delete(tempDir, true);
+      if ("local".equals(job.get("mapred.job.tracker")) && numLists != 1) {
+        // override
+        LOG.info("Generator: jobtracker is 'local', generating exactly one partition.");
+        numLists = 1;
       }
-      throw e;
-    }
+      job.setLong(GENERATOR_CUR_TIME, curTime);
+      // record real generation time
+      long generateTime = System.currentTimeMillis();
+      job.setLong(Nutch.GENERATE_TIME_KEY, generateTime);
+      job.setBoolean(GENERATOR_FILTER, filter);
+      job.setBoolean(GENERATOR_NORMALISE, norm);
+      job.setInt(GENERATOR_MAX_NUM_SEGMENTS, maxNumSegments);
+      job.setInt("partition.url.seed", new Random().nextInt());
 
+      FileInputFormat.addInputPath(job, new Path(dbDir, CrawlDb.CURRENT_NAME));
+      job.setInputFormat(SequenceFileInputFormat.class);
+
+      job.setMapperClass(Selector.class);
+      job.setPartitionerClass(Selector.class);
+      job.setReducerClass(Selector.class);
+
+      Path stage1Dir = tempDir.suffix("/stage1");
+      FileOutputFormat.setOutputPath(job, stage1Dir);
+      job.setOutputFormat(SequenceFileOutputFormat.class);
+      job.setMapOutputKeyClass(DomainScorePair.class);
+      job.setOutputKeyClass(FloatWritable.class);
+      job.setOutputKeyComparatorClass(ScoreComparator.class);
+      job.setOutputValueGroupingComparator(DomainComparator.class);
+      job.setOutputValueClass(SelectorEntry.class);
+
+      try {
+        JobClient.runJob(job);
+      } catch (IOException e) {
+        if (!keep) {
+          tempFs.delete(tempDir, true);
+        }
+        throw e;
+      }
+
+      // Read through the generated URL list and output individual segment files
+      job = new NutchJob(getConf());
+      job.setJobName("generate: segmenter");
+      job.setInt(GENERATOR_MAX_NUM_SEGMENTS, maxNumSegments);
+      job.setLong(GENERATOR_TOP_N, topN);
+
+      FileInputFormat.addInputPath(job, stage1Dir);
+      job.setInputFormat(SequenceFileInputFormat.class);
+
+      job.setMapperClass(Segmenter.class);
+      job.setReducerClass(Segmenter.class);
+
+      job.setMapOutputKeyClass(IntWritable.class);
+      job.setMapOutputValueClass(SelectorEntry.class);
+      job.setOutputKeyClass(Text.class);
+      job.setOutputValueClass(SelectorEntry.class);
+
+      stage2Dir = tempDir.suffix("/stage2");
+      FileOutputFormat.setOutputPath(job, stage2Dir);
+      job.setOutputFormat(GeneratorOutputFormat.class);
+
+      try {
+        JobClient.runJob(job);
+      } catch (IOException e) {
+        if (!keep) {
+          tempFs.delete(tempDir, true);
+        }
+        throw e;
+      }
+    } else {
+      stage2Dir = new Path(stage2);
+    }
     // read the subdirectories generated in the temp
     // output and turn them into segments
     List<Path> generatedSegments;
@@ -703,7 +729,12 @@ public class Generator2 extends Configured implements Tool {
     job.setOutputFormat(PartitionOutputter.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(CrawlDatum.class);
-    //job.setOutputKeyComparatorClass(HashComparator.class);
+
+    // S3 driver does an MD5 verification after uploading
+    // Also, this is painfully slow because of S3's slow copy functions
+    if (fs instanceof NativeS3FileSystem) {
+      job.setOutputCommitter(NullOutputCommitter.class);
+    }
 
     try {
       JobClient.runJob(job);
@@ -749,6 +780,8 @@ public class Generator2 extends Configured implements Tool {
     boolean force = false;
     boolean keep = false;
     int maxNumSegments = 1;
+    String stage2 = null;
+
 
     for (int i = 2; i < args.length; i++) {
       if ("-numPerSegment".equals(args[i])) {
@@ -770,13 +803,16 @@ public class Generator2 extends Configured implements Tool {
         maxNumSegments = Integer.parseInt(args[i + 1]);
       } else if ("-keep".equals(args[i])) {
         keep = true;
+      } else if ("-stage2".equals(args[i])) {
+        stage2 = args[i+1];
+        i++;
       }
 
     }
 
     try {
       Path[] segs = generate(dbDir, segmentsDir, numFetchers, topN, curTime, filter,
-          norm, force, maxNumSegments, keep);
+          norm, force, maxNumSegments, keep, stage2);
       if (segs == null) return -1;
     } catch (Exception e) {
       LOG.error("Generator: " + StringUtils.stringifyException(e));
