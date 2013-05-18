@@ -232,16 +232,28 @@ public class Fetcher extends Configured implements Tool,
     Set<FetchItem>  inProgress = Collections.synchronizedSet(new HashSet<FetchItem>());
     AtomicLong nextFetchTime = new AtomicLong();
     AtomicInteger exceptionCounter = new AtomicInteger();
+    boolean fixedCrawlDelay = false;
     long crawlDelay;
     long minCrawlDelay;
+    long maxCrawlDelay;
     int maxThreads;
     Configuration conf;
+    long startTime = 0;
+    long requests = 0;
+    long maxFetchTime = 0;
+    long cumulativeFetchTime = 0;
+    float delayFactor;
+    long lastFetchTime = 0;
 
-    public FetchItemQueue(Configuration conf, int maxThreads, long crawlDelay, long minCrawlDelay) {
+    public FetchItemQueue(Configuration conf, int maxThreads, long crawlDelay, long minCrawlDelay, long maxCrawlDelay, float delayFactor) {
       this.conf = conf;
       this.maxThreads = maxThreads;
       this.crawlDelay = crawlDelay;
       this.minCrawlDelay = minCrawlDelay;
+      this.maxCrawlDelay = maxCrawlDelay;
+      this.delayFactor = delayFactor;
+      this.lastFetchTime = crawlDelay * 1000;
+
       // ready to start
       setEndTime(System.currentTimeMillis() - crawlDelay);
     }
@@ -264,10 +276,18 @@ public class Fetcher extends Configured implements Tool,
       return exceptionCounter.incrementAndGet();
     }
 
-    public void finishFetchItem(FetchItem it, boolean asap) {
+    public void finishFetchItem(FetchItem it, boolean asap, boolean success) {
       if (it != null) {
         inProgress.remove(it);
-        setEndTime(System.currentTimeMillis(), asap);
+        long now = System.currentTimeMillis();
+
+        if (success) {
+          requests++;
+          lastFetchTime = now-startTime;
+          maxFetchTime = Math.max(maxFetchTime, lastFetchTime);
+          cumulativeFetchTime += lastFetchTime;
+        }
+        setEndTime(now, asap);
       }
     }
 
@@ -278,6 +298,7 @@ public class Fetcher extends Configured implements Tool,
 
     public void addInProgressFetchItem(FetchItem it) {
       if (it == null) return;
+      startTime = System.currentTimeMillis();
       inProgress.add(it);
     }
 
@@ -289,7 +310,7 @@ public class Fetcher extends Configured implements Tool,
       if (queue.size() == 0) return null;
       try {
         it = queue.remove(0);
-        inProgress.add(it);
+        addInProgressFetchItem(it);
       } catch (Exception e) {
         LOG.error("Cannot remove FetchItem from queue or cannot add it to inProgress queue", e);
       }
@@ -314,9 +335,15 @@ public class Fetcher extends Configured implements Tool,
     }
 
     private void setEndTime(long endTime, boolean asap) {
-      if (!asap)
-        nextFetchTime.set(endTime + (maxThreads > 1 ? minCrawlDelay : crawlDelay));
-      else
+      if (!asap) {
+        if (fixedCrawlDelay || requests < 2 || queue.size() < 2)
+          nextFetchTime.set(endTime + (maxThreads > 1 ? minCrawlDelay : crawlDelay));
+        else {
+          long delay = Math.max(minCrawlDelay, Math.min((long)(lastFetchTime * delayFactor), maxCrawlDelay));
+          crawlDelay = (crawlDelay + delay) / 2;  // don't change too fast
+          nextFetchTime.set(endTime + crawlDelay);
+        }
+      } else
         nextFetchTime.set(endTime);
     }
   }
@@ -332,7 +359,9 @@ public class Fetcher extends Configured implements Tool,
     int maxThreads;
     long crawlDelay;
     long minCrawlDelay;
+    long maxCrawlDelay;
     long timelimit = -1;
+    float delayFactor;
     int maxExceptionsPerQueue = -1;
     Configuration conf;
 
@@ -356,6 +385,8 @@ public class Fetcher extends Configured implements Tool,
 
       this.crawlDelay = (long) (conf.getFloat("fetcher.server.delay", 1.0f) * 1000);
       this.minCrawlDelay = (long) (conf.getFloat("fetcher.server.min.delay", 0.0f) * 1000);
+      this.maxCrawlDelay = (long) (conf.getFloat("fetcher.server.max.delay", 30.0f) * 1000);
+      this.delayFactor = conf.getFloat("fetcher.server.delay.factor", 1.5f);
       this.timelimit = conf.getLong("fetcher.timelimit", -1);
       this.maxExceptionsPerQueue = conf.getInt("fetcher.max.exceptions.per.queue", -1);
     }
@@ -380,23 +411,23 @@ public class Fetcher extends Configured implements Tool,
     }
 
     public void finishFetchItem(FetchItem it) {
-      finishFetchItem(it, false);
+      finishFetchItem(it, false, false);
     }
 
-    public void finishFetchItem(FetchItem it, boolean asap) {
+    public void finishFetchItem(FetchItem it, boolean asap, boolean success) {
       FetchItemQueue fiq = queues.get(it.queueID);
       if (fiq == null) {
         LOG.warn("Attempting to finish item from unknown queue: " + it);
         return;
       }
-      fiq.finishFetchItem(it, asap);
+      fiq.finishFetchItem(it, asap, success);
     }
 
     public synchronized FetchItemQueue getFetchItemQueue(String id) {
       FetchItemQueue fiq = queues.get(id);
       if (fiq == null) {
         // initialize queue
-        fiq = new FetchItemQueue(conf, maxThreads, crawlDelay, minCrawlDelay);
+        fiq = new FetchItemQueue(conf, maxThreads, crawlDelay, minCrawlDelay, maxCrawlDelay, delayFactor);
         queues.put(id, fiq);
       }
       return fiq;
@@ -668,7 +699,7 @@ public class Fetcher extends Configured implements Tool,
             do {
               if (LOG.isInfoEnabled()) {
                 LOG.info("fetching " + fit.url + " (queue crawl delay=" + 
-                         fetchQueues.getFetchItemQueue(fit.queueID).crawlDelay + "ms)"); 
+                         fetchQueues.getFetchItemQueue(fit.queueID).crawlDelay + "ms)");
               }
               if (LOG.isDebugEnabled()) {
                 LOG.debug("redirectCount=" + redirectCount);
@@ -678,7 +709,7 @@ public class Fetcher extends Configured implements Tool,
               BaseRobotRules rules = protocol.getRobotRules(fit.url, fit.datum);
               if (!rules.isAllowed(fit.u.toString())) {
                 // unblock
-                fetchQueues.finishFetchItem(fit, true);
+                fetchQueues.finishFetchItem(fit, true, false);
                 if (LOG.isDebugEnabled()) {
                   LOG.debug("Denied by robots.txt: " + fit.url);
                 }
@@ -690,7 +721,7 @@ public class Fetcher extends Configured implements Tool,
                 fit.datum.getMetaData().put(new Text(Nutch.CRAWL_DELAY_KEY), new Text(Long.toString(rules.getCrawlDelay())));
                 if (rules.getCrawlDelay() > maxCrawlDelay && maxCrawlDelay >= 0) {
                   // unblock
-                  fetchQueues.finishFetchItem(fit, true);
+                  fetchQueues.finishFetchItem(fit, true, false);
                   LOG.debug("Crawl-Delay for " + fit.url + " too long (" + rules.getCrawlDelay() + "), skipping");
                   output(fit.url, fit.datum, null, ProtocolStatus.STATUS_ROBOTS_DENIED, CrawlDatum.STATUS_FETCH_GONE);
                   reporter.incrCounter("FetcherStatus", "robots_denied_maxcrawldelay", 1);
@@ -698,6 +729,7 @@ public class Fetcher extends Configured implements Tool,
                 } else {
                   FetchItemQueue fiq = fetchQueues.getFetchItemQueue(fit.queueID);
                   fiq.crawlDelay = rules.getCrawlDelay();
+                  fiq.fixedCrawlDelay = true;
                   if (LOG.isDebugEnabled()) {
                     LOG.info("Crawl delay for queue: " + fit.queueID + " is set to " + fiq.crawlDelay + " as per robots.txt. url: " + fit.url);
                   }
@@ -711,7 +743,7 @@ public class Fetcher extends Configured implements Tool,
               Content content = output.getContent();
               ParseStatus pstatus = null;
               // unblock queue
-              fetchQueues.finishFetchItem(fit);
+              fetchQueues.finishFetchItem(fit, false, status.isSuccess());
 
               String urlString = fit.url.toString();
 
