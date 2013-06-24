@@ -881,7 +881,6 @@ public class Fetcher extends Configured implements Tool,
             output(fit.url, fit.datum, null, ProtocolStatus.STATUS_FAILED, CrawlDatum.STATUS_FETCH_RETRY);
           }
         }
-
       } catch (Throwable e) {
         if (LOG.isErrorEnabled()) {
           LOG.error("fetcher caught:"+e.toString());
@@ -1376,6 +1375,7 @@ public class Fetcher extends Configured implements Tool,
     job.setOutputFormat(FetcherOutputFormat.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(NutchWritable.class);
+
 
     // S3 driver does an MD5 verification after uploading
     // Also, this is painfully slow because of S3's slow copy functions

@@ -17,6 +17,8 @@
 
 package org.apache.nutch.parse;
 
+import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
+import org.apache.nutch.crawl.NullOutputCommitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -205,6 +207,13 @@ public class ParseSegment extends Configured implements Tool,
     job.setOutputFormat(ParseOutputFormat.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(ParseImpl.class);
+
+
+    // S3 driver does an MD5 verification after uploading
+    // Also, this is painfully slow because of S3's slow copy functions
+    if (segment.getFileSystem(getConf()) instanceof NativeS3FileSystem) {
+      job.setOutputCommitter(NullOutputCommitter.class);
+    }
 
     JobClient.runJob(job);
     long end = System.currentTimeMillis();
