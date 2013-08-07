@@ -39,6 +39,12 @@ import org.apache.nutch.protocol.ProtocolException;
 import org.apache.nutch.protocol.http.api.HttpBase;
 import org.apache.nutch.protocol.http.api.HttpException;
 
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.SSLSocket;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
+
 
 /** An HTTP response. */
 public class HttpResponse implements Response {
@@ -51,6 +57,11 @@ public class HttpResponse implements Response {
   private int code;
   private Metadata headers = new SpellCheckedMetadata();
 
+  protected enum Scheme {
+    HTTP,
+    HTTPS,
+  }
+
   public HttpResponse(HttpBase http, URL url, CrawlDatum datum)
     throws ProtocolException, IOException {
 
@@ -58,9 +69,15 @@ public class HttpResponse implements Response {
     this.url = url;
     this.orig = url.toString();
     this.base = url.toString();
+    Scheme scheme = null;
 
-    if (!"http".equals(url.getProtocol()))
-      throw new HttpException("Not an HTTP url:" + url);
+    if ("http".equals(url.getProtocol())) {
+      scheme = Scheme.HTTP;
+    } else if ("https".equals(url.getProtocol())) {
+      scheme = Scheme.HTTPS;
+    } else {
+      throw new HttpException("Unknown scheme (not http/https) for url:" + url);
+    }
 
     if (Http.LOG.isTraceEnabled()) {
       Http.LOG.trace("fetching " + url);
@@ -76,7 +93,11 @@ public class HttpResponse implements Response {
     int port;
     String portString;
     if (url.getPort() == -1) {
-      port= 80;
+      if (scheme == Scheme.HTTP) {
+        port = 80;
+      } else {
+        port = 443;
+      }
       portString= "";
     } else {
       port= url.getPort();
@@ -88,12 +109,21 @@ public class HttpResponse implements Response {
       socket = new Socket();                    // create the socket
       socket.setSoTimeout(http.getTimeout());
 
-
-      // connect
+       // connect
       String sockHost = http.useProxy() ? http.getProxyHost() : host;
       int sockPort = http.useProxy() ? http.getProxyPort() : port;
-      InetSocketAddress sockAddr= new InetSocketAddress(sockHost, sockPort);
+      InetSocketAddress sockAddr = new InetSocketAddress(sockHost, sockPort);
       socket.connect(sockAddr, http.getTimeout());
+
+      if (scheme == Scheme.HTTPS) {
+        SSLSocketFactory factory = (SSLSocketFactory)SSLSocketFactory.getDefault();
+        SSLSocket sslsocket = (SSLSocket)factory.createSocket(socket, sockHost, sockPort, true);
+        sslsocket.setUseClientMode(true);
+        String[] protocols = { "TLSv1", "SSLv3" };
+        sslsocket.setEnabledProtocols(protocols);
+        sslsocket.startHandshake();
+        socket = sslsocket;
+      }
 
       // make request
       OutputStream req = socket.getOutputStream();
