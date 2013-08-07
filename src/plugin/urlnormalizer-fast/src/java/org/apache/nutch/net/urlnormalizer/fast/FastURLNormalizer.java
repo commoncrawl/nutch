@@ -30,7 +30,6 @@ import org.apache.nutch.net.URLNormalizer;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
-import org.apache.oro.text.regex.*;
 
 /**
  * Converts URLs to a normal form .
