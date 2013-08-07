@@ -83,4 +83,7 @@ public interface Nutch {
 
   // Verbatim request we fetched
   public static final String FETCH_REQUEST_VERBATIM_KEY = "cc.request.verbatim";
+
+  // Verbatim headers we fetched
+  public static final String FETCH_RESPONSE_VERBATIM_HEADERS_KEY = "cc.response.headers.verbatim";
 }

@@ -56,6 +56,7 @@ public class HttpResponse implements Response {
   private byte[] content;
   private int code;
   private Metadata headers = new SpellCheckedMetadata();
+  private StringBuffer verbatimResponseHeaders = new StringBuffer();
 
   protected enum Scheme {
     HTTP,
@@ -421,6 +422,7 @@ public class HttpResponse implements Response {
             //for the returned header names to the standard metadata
             //names in the ParseData class
           processHeaderLine(line);
+          verbatimResponseHeaders.append(line);
         } catch (Exception e) {
           // fixme:
           Http.LOG.warn("Error: ", e);
@@ -429,7 +431,9 @@ public class HttpResponse implements Response {
       }
 
       processHeaderLine(line);
+      verbatimResponseHeaders.append(line);
     }
+    headers.set(Nutch.FETCH_RESPONSE_VERBATIM_HEADERS_KEY, verbatimResponseHeaders.toString());
   }
 
   private static int readLine(PushbackInputStream in, StringBuffer line,
