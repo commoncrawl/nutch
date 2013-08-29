@@ -24,6 +24,7 @@ import java.text.*;
 
 // rLogging imports
 import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
+import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.util.hash.MurmurHash;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -477,7 +478,28 @@ public class Generator2 extends Configured implements Tool {
 
       return super.getRecordWriter(fs, job, name, arg3);
     }
-  }
+
+    @Override
+    public void checkOutputSpecs(FileSystem ignored, JobConf job)
+        throws FileAlreadyExistsException,
+        InvalidJobConfException, IOException {
+      // Ensure that the output directory is set and not already there
+      Path outDir = getOutputPath(job);
+      if (outDir == null && job.getNumReduceTasks() != 0) {
+        throw new InvalidJobConfException("Output directory not set in JobConf.");
+      }
+      if (outDir != null) {
+        FileSystem fs = outDir.getFileSystem(job);
+        // normalize the output directory
+        outDir = fs.makeQualified(outDir);
+        setOutputPath(job, outDir);
+
+        // get delegation token for the outDir's file system
+        TokenCache.obtainTokensForNamenodes(job.getCredentials(),
+            new Path[]{outDir}, job);
+
+      }
+    }
 
   /** Sort fetch lists by hash of URL. */
   public static class HashComparator extends WritableComparator {
@@ -703,7 +725,7 @@ public class Generator2 extends Configured implements Tool {
 
     job.setNumReduceTasks(0);
 
-    FileOutputFormat.setOutputPath(job, segmentsDir);
+    PartitionOutputter.setOutputPath(job, segmentsDir);
     job.setOutputFormat(PartitionOutputter.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(CrawlDatum.class);

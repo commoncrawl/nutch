@@ -131,7 +131,11 @@ public class Injector extends Configured implements Tool {
       }
       try {
         url = urlNormalizers.normalize(url, URLNormalizers.SCOPE_INJECT);
+        String urlsave = url;
         url = filters.filter(url);             // filter the url
+        if (url == null && LOG.isWarnEnabled()) {
+          LOG.warn("Filtering: " +urlsave);
+        }
       } catch (Exception e) {
         if (LOG.isWarnEnabled()) { LOG.warn("Skipping " +url+":"+e); }
         url = null;
