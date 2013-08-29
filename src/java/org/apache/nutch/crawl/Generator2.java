@@ -500,6 +500,7 @@ public class Generator2 extends Configured implements Tool {
 
       }
     }
+  }
 
   /** Sort fetch lists by hash of URL. */
   public static class HashComparator extends WritableComparator {
