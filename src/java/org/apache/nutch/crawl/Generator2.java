@@ -299,6 +299,14 @@ public class Generator2 extends Configured implements Tool {
         return;
       }
 
+      /*
+      if (value.getStatus() != CrawlDatum.STATUS_DB_UNFETCHED) {
+        LOG.debug("-newonly rejected '" + key + "', fetchTime="
+            + value.getFetchTime() + ", curTime=" + curTime);
+        return;
+      }
+      */
+
       LongWritable oldGenTime = (LongWritable) value.getMetaData().get(Nutch.WRITABLE_GENERATE_TIME_KEY);
       if (oldGenTime != null) { // awaiting fetch & update
         if (oldGenTime.get() + genDelay > curTime) // still wait for
@@ -373,7 +381,7 @@ public class Generator2 extends Configured implements Tool {
         SelectorEntry entry = values.next();
 
         hostCount++;
-        if (hostCount > maxCount * maxNumSegments) {
+        if (maxCount > 0 && hostCount > maxCount * maxNumSegments) {
           if (hostCount == maxCount * maxNumSegments && LOG.isInfoEnabled()) {
             LOG.info("Host or domain " + key.getDomain() + " has more than " + maxCount
                 + " URLs for all " + maxNumSegments + " segments. Additional URLs won't be included in the fetchlist.");
