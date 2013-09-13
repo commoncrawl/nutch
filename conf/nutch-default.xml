@@ -1082,6 +1082,16 @@
   for most people would be "img,script,link".</description>
 </property>
 
+
+<property>
+  <name>parser.html.outlinks.filter_tags</name>
+  <value></value>
+  <description>Comma separated list of CSS selectors for tags. This filters
+  the existing tag based on the critera passed in. For instance:
+  "link[type*=css], link[rel=stylesheet] would limit link tags to just
+  stylesheets.</description>
+</property>
+
 <property>
   <name>parser.fix.embeddedparams</name>
   <value>true</value>

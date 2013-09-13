@@ -22,13 +22,15 @@ import java.net.MalformedURLException;
 import java.util.Collection;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Stack;
+import java.util.List;
 
 import org.apache.nutch.parse.Outlink;
 import org.apache.nutch.util.NodeWalker;
 import org.apache.nutch.util.URLUtil;
 import org.apache.hadoop.conf.Configuration;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.*;
 
 /**
@@ -39,21 +41,216 @@ import org.w3c.dom.*;
  *
  */
 public class DOMContentUtils {
+  public static final Logger LOG = LoggerFactory.getLogger("org.apache.nutch.parse.html");
+
+  public static class Specifier {
+    public static enum Match {
+      EXISTS, EQUALS, STARTS_WITH, ENDS_WITH, SUBSTRING
+    }
+
+    public String name;
+    public String value;
+    public Match match;
+
+    public Specifier(String name) {
+      this.name = name;
+      this.value = null;
+      this.match = null;
+    }
+
+    public Specifier(String name, String value, Match match) {
+      this.name = name;
+      this.value = value;
+      this.match = match;
+    }
+
+    private static List<CharSequence> tokenizer(CharSequence str) {
+      List<CharSequence> tokens = new ArrayList<CharSequence>();
+      int length = str.length();
+      for (int i = 0; i < length; i++) {
+        char chr = str.charAt(i);
+        int start = i;
+
+        switch (chr) {
+          case '[':
+          case ']':
+            tokens.add(str.subSequence(i, i + 1));
+            break;
+
+          case '~':
+          case '^':
+          case '*':
+          case '|':
+          case '$':
+            if (str.charAt(i + 1) == '=') {
+              i++;
+              tokens.add(str.subSequence(start, i + 1));
+              break;
+            }
+
+          case '=':
+            int tokenSize = tokens.size();
+            if (tokenSize > 0 && " ".equals(tokens.get(tokenSize - 1)))
+              tokens.set(tokens.size() - 1, str.subSequence(start, i + 1));
+            else
+              tokens.add(str.subSequence(start, i + 1));
+            while (Character.isWhitespace(str.charAt(i + 1)))
+              i++;
+            break;
+
+          case '"':
+          case '\'':
+            char tmp;
+            while ((tmp = str.charAt(++i)) != chr) {
+              if (tmp == '\\')
+                i++;
+            }
+            tokens.add(str.subSequence(start + 1, i).toString()
+                .replace("\\" + chr, "" + chr));
+            break;
+
+
+          default:
+            if (Character.isLetter(chr) || Character.isDigit(chr) || "-_".indexOf(chr) >= 0) {
+              while (i + 1 < str.length()
+                  && Character.isLetter(chr = str.charAt(i + 1))
+                  || "-_".indexOf(chr) >= 0)
+                i++;
+              tokens.add(str.subSequence(start, i + 1));
+            }
+        }
+      }
+
+      return tokens;
+    }
+
+    private static Specifier lexer(List<CharSequence> seq) {
+      for (int i = 0, tokNbr = 0; i < seq.size(); i++, tokNbr++) {
+        CharSequence token = seq.get(i);
+
+        if (token.equals("[")) {
+          CharSequence tagName = seq.get(++i);
+          CharSequence matchop = seq.get(++i);
+          Match match = Match.EXISTS;
+          CharSequence pattern = null;
+          if (!matchop.equals("]")) {
+            pattern = seq.get(++i);
+            if (matchop.equals("^=")) {
+              match = Match.STARTS_WITH;
+            } else if (matchop.equals("$=")) {
+              match = Match.ENDS_WITH;
+            } else if (matchop.equals("=")) {
+              match = Match.EQUALS;
+            } else if (matchop.equals("*=")) {
+              match = Match.SUBSTRING;
+            } else {
+              throw new RuntimeException("Unknown match operator: " + matchop);
+            }
+            if (!"]".equals(seq.get(++i))) {
+              throw new RuntimeException("Unterminated specifier ]");
+            }
+          }
+          return new Specifier(tagName.toString(), pattern.toString(), match);
+        }
+      }
+
+      throw new RuntimeException("No valid specifiers");
+    }
+
+    public static Specifier fromString(CharSequence str) {
+      List<CharSequence> tokens = tokenizer(str);
+      return lexer(tokens);
+    }
+
+    public boolean matches(Node node) {
+      NamedNodeMap attributes = node.getAttributes();
+      if (attributes == null) {
+        return false;
+      }
+
+      Node attN = attributes.getNamedItem(name);
+      if (attN == null) {
+        return false;
+      }
+
+      String value = attN.getNodeValue().toLowerCase();
+
+      switch (match) {
+        case EQUALS:
+          return value.equals(this.value);
+        case STARTS_WITH:
+          return value.startsWith(this.value);
+        case ENDS_WITH:
+          return value.endsWith(this.value);
+        case SUBSTRING:
+          return value.contains(this.value);
+        default:
+          return false;
+      }
+    }
+
+    public String toString() {
+      String ret = "[" + name;
+      if (match == Match.STARTS_WITH) {
+        ret += "^=";
+      } else if (match == Match.SUBSTRING) {
+        ret += "*=";
+      } else if (match == Match.ENDS_WITH) {
+        ret += "$=";
+      } else if (match == Match.EQUALS) {
+        ret += "=";
+      }
+
+      ret += value + "]";
+      return ret;
+    }
+  }
 
   public static class LinkParams {
     public String elName;
     public String attrName;
-      public int childLen;
-      
-      public LinkParams(String elName, String attrName, int childLen) {
-          this.elName = elName;
-          this.attrName = attrName;
-          this.childLen = childLen;
+    public int childLen;
+    public List<Specifier> specifiers;
+
+    public LinkParams(String elName, String attrName, int childLen) {
+      this.elName = elName;
+      this.attrName = attrName;
+      this.childLen = childLen;
+      this.specifiers = new ArrayList<Specifier>();
+    }
+
+    public LinkParams(String elName, String attrName, int childLen, List<Specifier> specifiers) {
+      this.elName = elName;
+      this.attrName = attrName;
+      this.childLen = childLen;
+      this.specifiers = specifiers;
+    }
+
+    public boolean matches(Node node) {
+      if (!node.getNodeName().equalsIgnoreCase(this.elName)) {
+        return false;
       }
-      
-      public String toString() {
-          return "LP[el=" + elName + ",attr=" + attrName + ",len=" + childLen + "]";
+
+      // If we have specifiers, one must match
+      if (specifiers != null) {
+        for (Specifier s : specifiers) {
+          if (s.matches(node)) {
+            return true;
+          }
+        }
+        return false;
       }
+
+      return true;
+    }
+
+    public String toString() {
+      String ret = "LP[el=" + elName + ",attr=" + attrName + ",len=" + childLen + "]";
+      for (Specifier specifier : specifiers) {
+        ret += "\n" + specifier.toString();
+      }
+      return ret;
+    }
   }
   
   private HashMap<String,LinkParams> linkParams = new HashMap<String,LinkParams>();
@@ -87,6 +284,29 @@ public class DOMContentUtils {
     for ( int i = 0 ; ignoreTags != null && i < ignoreTags.length ; i++ ) {
       if ( ! forceTags.contains(ignoreTags[i]) )
         linkParams.remove(ignoreTags[i]);
+    }
+
+    // add specifiers if they exist
+    String[] filterTags = conf.getStrings("parser.html.outlinks.filter_tags");
+    for (int i = 0; filterTags != null && i < filterTags.length; i++) {
+      String tagName;
+      int specifierStart = filterTags[i].indexOf("[");
+
+      if (specifierStart == -1) {
+        continue;
+      }
+
+      tagName = filterTags[i].substring(0, specifierStart);
+      if (linkParams.containsKey(tagName)) {
+        LinkParams lp = linkParams.get(tagName);
+
+        try {
+          Specifier spec = Specifier.fromString(filterTags[i].substring(specifierStart));
+          lp.specifiers.add(spec);
+        } catch (Exception e) {
+          LOG.error("Error processing filtertag " + filterTags[i] + ": " + e.toString());
+        }
+      }
     }
   }
   
@@ -330,7 +550,7 @@ public class DOMContentUtils {
         
         nodeName = nodeName.toLowerCase();
         LinkParams params = (LinkParams)linkParams.get(nodeName);
-        if (params != null) {
+        if (params != null && params.matches(currentNode)) {
           if (!shouldThrowAwayLink(currentNode, children, childLen, params)) {
   
             StringBuffer linkText = new StringBuffer();
