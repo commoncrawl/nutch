@@ -423,6 +423,7 @@ public class HttpResponse implements Response {
             //names in the ParseData class
           processHeaderLine(line);
           verbatimResponseHeaders.append(line);
+          verbatimResponseHeaders.append("\n");
         } catch (Exception e) {
           // fixme:
           Http.LOG.warn("Error: ", e);
@@ -432,6 +433,7 @@ public class HttpResponse implements Response {
 
       processHeaderLine(line);
       verbatimResponseHeaders.append(line);
+      verbatimResponseHeaders.append("\n");
     }
     headers.set(Nutch.FETCH_RESPONSE_VERBATIM_HEADERS_KEY, verbatimResponseHeaders.toString());
   }
