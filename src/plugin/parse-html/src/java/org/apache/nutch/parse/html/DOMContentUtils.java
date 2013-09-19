@@ -232,7 +232,7 @@ public class DOMContentUtils {
       }
 
       // If we have specifiers, one must match
-      if (specifiers != null) {
+      if (specifiers.size() != 0) {
         for (Specifier s : specifiers) {
           if (s.matches(node)) {
             return true;
@@ -552,7 +552,6 @@ public class DOMContentUtils {
         LinkParams params = (LinkParams)linkParams.get(nodeName);
         if (params != null && params.matches(currentNode)) {
           if (!shouldThrowAwayLink(currentNode, children, childLen, params)) {
-  
             StringBuffer linkText = new StringBuffer();
             getText(linkText, currentNode, true);
             if (linkText.toString().trim().length() == 0) {
@@ -602,7 +601,7 @@ public class DOMContentUtils {
                 post = true;
               }
             }
-            if (target != null && !noFollow && !post)
+            if (target != null && !noFollow && !post) {
               try {
                 
                 URL url = URLUtil.resolveURL(base, target);
@@ -611,6 +610,7 @@ public class DOMContentUtils {
               } catch (MalformedURLException e) {
                 // don't care
               }
+            }
           }
           // this should not have any children, skip them
           if (params.childLen == 0) continue;
