@@ -24,6 +24,7 @@ import java.net.UnknownHostException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -255,7 +256,7 @@ public class Fetcher extends Configured implements Tool,
       this.lastFetchTime = crawlDelay * 1000;
 
       // ready to start
-      setEndTime(System.currentTimeMillis() - crawlDelay);
+      setEndTime(System.currentTimeMillis(), true);
     }
 
     public synchronized int emptyQueue() {
@@ -330,10 +331,6 @@ public class Fetcher extends Configured implements Tool,
       }
     }
 
-    private void setEndTime(long endTime) {
-      setEndTime(endTime, false);
-    }
-
     private void setEndTime(long endTime, boolean asap) {
       if (!asap) {
         if (fixedCrawlDelay || requests < 2 || queue.size() < 2) {
@@ -354,7 +351,8 @@ public class Fetcher extends Configured implements Tool,
    */
   private static class FetchItemQueues {
     public static final String DEFAULT_ID = "default";
-    Map<String, FetchItemQueue> queues = new HashMap<String, FetchItemQueue>();
+    Map<String, FetchItemQueue> queues = new ConcurrentHashMap<String, FetchItemQueue>();
+    Iterator<Map.Entry<String, FetchItemQueue>> lastIterator = null;
     AtomicInteger totalSize = new AtomicInteger(0);
     int maxThreads;
     long crawlDelay;
@@ -434,10 +432,14 @@ public class Fetcher extends Configured implements Tool,
     }
 
     public synchronized FetchItem getFetchItem() {
-      Iterator<Map.Entry<String, FetchItemQueue>> it =
-        queues.entrySet().iterator();
+      Iterator<Map.Entry<String, FetchItemQueue>> it = lastIterator;
+      if (it == null) {
+        it = queues.entrySet().iterator();
+      }
+
       while (it.hasNext()) {
         FetchItemQueue fiq = it.next().getValue();
+
         // reap empty queues
         if (fiq.getQueueSize() == 0 && fiq.getInProgressSize() == 0) {
           it.remove();
@@ -446,9 +448,11 @@ public class Fetcher extends Configured implements Tool,
         FetchItem fit = fiq.getFetchItem();
         if (fit != null) {
           totalSize.decrementAndGet();
+          lastIterator = it;
           return fit;
         }
       }
+      lastIterator = null;
       return null;
     }
 
@@ -884,6 +888,7 @@ public class Fetcher extends Configured implements Tool,
       } catch (Throwable e) {
         if (LOG.isErrorEnabled()) {
           LOG.error("fetcher caught:"+e.toString());
+          e.printStackTrace();
         }
       } finally {
         if (fit != null) fetchQueues.finishFetchItem(fit);
