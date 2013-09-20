@@ -129,6 +129,7 @@ public class ParserChecker implements Tool {
       LOG.warn("Content is truncated, parse may fail!");
     }
 
+    long start = System.currentTimeMillis();
     ParseResult parseResult = new ParseUtil(conf).parse(content);
 
     if (parseResult == null) {
@@ -156,6 +157,8 @@ public class ParserChecker implements Tool {
         System.out.print(parse.getText());
       }
     }
+    long elapsed = System.currentTimeMillis() - start;
+    System.out.println("Parsed in " + elapsed + "ms");
 
     return 0;
   }
