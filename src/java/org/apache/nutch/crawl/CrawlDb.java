@@ -88,9 +88,10 @@ public class CrawlDb extends Configured implements Tool {
     }
 
     for (int i = 0; i < segments.length; i++) {
+      FileSystem sfs = segments[i].getFileSystem(getConf());
       Path fetch = new Path(segments[i], CrawlDatum.FETCH_DIR_NAME);
       Path parse = new Path(segments[i], CrawlDatum.PARSE_DIR_NAME);
-      if (fs.exists(fetch) && fs.exists(parse)) {
+      if (sfs.exists(fetch) && sfs.exists(parse)) {
         FileInputFormat.addInputPath(job, fetch);
         FileInputFormat.addInputPath(job, parse);
       } else {
