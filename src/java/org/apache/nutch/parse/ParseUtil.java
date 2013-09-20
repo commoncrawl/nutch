@@ -56,7 +56,7 @@ public class ParseUtil {
   public ParseUtil(Configuration conf) {
     this.parserFactory = new ParserFactory(conf);
     maxParseTime=conf.getInt("parser.timeout", 30);
-    executorService = Executors.newCachedThreadPool(new ThreadFactoryBuilder()
+    executorService = Executors.newFixedThreadPool(3, new ThreadFactoryBuilder()
       .setNameFormat("parse-%d").setDaemon(true).build());
   }
   
