@@ -336,9 +336,9 @@ public class Fetcher extends Configured implements Tool,
 
     private void setEndTime(long endTime, boolean asap) {
       if (!asap) {
-        if (fixedCrawlDelay || requests < 2 || queue.size() < 2)
+        if (fixedCrawlDelay || requests < 2 || queue.size() < 2) {
           nextFetchTime.set(endTime + (maxThreads > 1 ? minCrawlDelay : crawlDelay));
-        else {
+        } else {
           long delay = Math.max(minCrawlDelay, Math.min((long)(lastFetchTime * delayFactor), maxCrawlDelay));
           crawlDelay = (crawlDelay + delay) / 2;  // don't change too fast
           nextFetchTime.set(endTime + crawlDelay);

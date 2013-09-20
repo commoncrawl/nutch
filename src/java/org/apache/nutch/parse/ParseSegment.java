@@ -87,20 +87,25 @@ public class ParseSegment extends Configured implements Tool,
     if (status != CrawlDatum.STATUS_FETCH_SUCCESS) {
       // content not fetched successfully, skip document
       LOG.debug("Skipping " + key + " as content is not fetched successfully");
+      reporter.incrCounter("ParserStatus", ParseStatus.majorCodes[ParseStatus.NOTPARSED], 1);
       return;
     }
     
     if (skipTruncated && isTruncated(content)) {
+      reporter.incrCounter("ParserStatus", ParseStatus.majorCodes[ParseStatus.NOTPARSED], 1);
       return;
     }
 
+    long startParse = System.currentTimeMillis();
     ParseResult parseResult = null;
     try {
       parseResult = new ParseUtil(getConf()).parse(content);
     } catch (Exception e) {
       LOG.warn("Error parsing: " + key + ": " + StringUtils.stringifyException(e));
+      reporter.incrCounter("ParserStatus", ParseStatus.majorCodes[ParseStatus.FAILED], 1);
       return;
     }
+    long parseTime = System.currentTimeMillis() - startParse;
 
     for (Entry<Text, Parse> entry : parseResult) {
       Text url = entry.getKey();
@@ -135,7 +140,7 @@ public class ParseSegment extends Configured implements Tool,
       }
 
       long end = System.currentTimeMillis();
-      LOG.info("Parsed (" + Long.toString(end - start) + "ms):" + url);
+      LOG.info("Parsed (" + Long.toString(end - start + parseTime) + "ms):" + url);
 
       output.collect(url, new ParseImpl(new ParseText(parse.getText()), 
                                         parse.getData(), parse.isCanonical()));
