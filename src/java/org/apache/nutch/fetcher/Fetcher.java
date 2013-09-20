@@ -681,7 +681,7 @@ public class Fetcher extends Configured implements Tool,
               try {
                 Thread.sleep(500);
               } catch (Exception e) {}
-                spinWaiting.decrementAndGet();
+              spinWaiting.decrementAndGet();
               continue;
             } else {
               // all done, finish this thread
