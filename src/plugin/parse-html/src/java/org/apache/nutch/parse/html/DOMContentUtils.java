@@ -173,7 +173,7 @@ public class DOMContentUtils {
         return false;
       }
 
-      String value = attN.getNodeValue().toLowerCase();
+      String value = attN.getNodeValue().toLowerCase().trim();
 
       switch (match) {
         case EQUALS:
