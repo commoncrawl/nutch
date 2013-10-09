@@ -87,5 +87,6 @@
     rather than look for them online.
     -->
     <module organisation="org.apache.nutch" name=".*" resolver="internal"/>
+    <module organisation="org.commoncrawl" name=".*" resolver="internal"/>
   </modules>
 </ivysettings>

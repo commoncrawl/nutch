@@ -303,6 +303,7 @@ public class DOMContentUtils {
         try {
           Specifier spec = Specifier.fromString(filterTags[i].substring(specifierStart));
           lp.specifiers.add(spec);
+          LOG.error("Adding specifier " + spec.toString() + " to " + tagName);
         } catch (Exception e) {
           LOG.error("Error processing filtertag " + filterTags[i] + ": " + e.toString());
         }
