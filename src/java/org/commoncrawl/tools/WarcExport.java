@@ -104,11 +104,12 @@ public class WarcExport extends Configured implements Tool {
       private URI warcinfoId;
       private final String CRLF = "\r\n";
 
-      public WarcRecordWriter(DataOutputStream out) {
+      public WarcRecordWriter(DataOutputStream out, String filename) {
         this.out = out;
+
         writer = new WarcWriter(out);
         try {
-          warcinfoId = writer.writeWarcinfoRecord();
+          warcinfoId = writer.writeWarcinfoRecord(filename);
           System.out.println("Writing warcinfo record");
           System.out.println("Record ID: " + warcinfoId.toString());
         } catch (IOException e) {
@@ -152,7 +153,7 @@ public class WarcExport extends Configured implements Tool {
           } else {
             // We have to fix up a few headers because we don't have the raw responses
             if (name.equalsIgnoreCase("Content-Length")) {
-              headers += "Content-Length: " + value.content.getContent().length;
+              headers += "Content-Length: " + value.content.getContent().length + CRLF;
             } else if (name.equalsIgnoreCase("Content-Encoding")) {
             } else if (name.equalsIgnoreCase("Transfer-Encoding")) {
             } else {
@@ -230,8 +231,9 @@ public class WarcExport extends Configured implements Tool {
     public RecordWriter<Text, CompleteData> getRecordWriter(FileSystem fs, JobConf job, String name,
                                                          Progressable progress) throws IOException {
       Path dir = FileOutputFormat.getOutputPath(job);
-      DataOutputStream fileOut = fs.create(new Path(dir, name + ".warc.gz"), progress);
-      return new WarcRecordWriter(fileOut);
+      String filename = name + ".warc.gz";
+      DataOutputStream fileOut = fs.create(new Path(dir, filename), progress);
+      return new WarcRecordWriter(fileOut, filename);
     }
   }
 

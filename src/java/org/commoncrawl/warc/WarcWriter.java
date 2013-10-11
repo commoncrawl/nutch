@@ -38,7 +38,8 @@ public class WarcWriter {
   private final String WARC_TARGET_URI = "WARC-Target-URI";
   private final String WARC_CONCURRENT_TO = "WARC-Concurrent-To";
   private final String WARC_PAYLOAD_DIGEST = "WARC-Payload-Digest";
-  private final String WARC_PROFILE = "Warc-Profile";
+  private final String WARC_PROFILE = "WARC-Profile";
+  private final String WARC_FILENAME = "WARC-Filename";
 
   public static final String PROFILE_REVISIT_IDENTICAL_DIGEST =
       "http://netpreserve.org/warc/1.0/revisit/identical-payload-digest";
@@ -73,7 +74,10 @@ public class WarcWriter {
    * @return record id for the warcinfo record
    * @throws IOException
    */
-  public URI writeWarcinfoRecord() throws IOException  {
+  public URI writeWarcinfoRecord(String filename) throws IOException  {
+    Map<String, String> extra = new LinkedHashMap<String, String>();
+    extra.put(WARC_FILENAME, filename);
+
     StringBuilder sb = new StringBuilder(1024);
     Map<String, String> settings = new LinkedHashMap<String, String>();
 
@@ -83,7 +87,7 @@ public class WarcWriter {
     byte[] ba = sb.toString().getBytes("utf-8");
     URI recordId = getRecordId();
 
-    writeRecord(WARC_INFO, new Date(), "application/warc-fields", recordId, null,
+    writeRecord(WARC_INFO, new Date(), "application/warc-fields", recordId, extra,
         new ByteArrayInputStream(ba), ba.length);
     return recordId;
   }
