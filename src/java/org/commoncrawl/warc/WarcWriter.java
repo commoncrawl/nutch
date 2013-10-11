@@ -108,7 +108,7 @@ public class WarcWriter {
     extra.put(WARC_TARGET_URI, targetUri.toString());
 
     URI recordId = getRecordId();
-    writeRecord(WARC_REQUEST, date, "application/http;msgtype=request", recordId, extra, content, contentLength);
+    writeRecord(WARC_REQUEST, date, "application/http; msgtype=request", recordId, extra, content, contentLength);
     return recordId;
   }
 
@@ -126,7 +126,7 @@ public class WarcWriter {
     }
 
     URI recordId = getRecordId();
-    writeRecord(WARC_RESPONSE, date, "application/http;msgtype=response", recordId, extra, content, contentLength);
+    writeRecord(WARC_RESPONSE, date, "application/http; msgtype=response", recordId, extra, content, contentLength);
     return recordId;
   }
 
@@ -146,7 +146,7 @@ public class WarcWriter {
     }
 
     URI recordId = getRecordId();
-    writeRecord(WARC_RESPONSE, date, "application/http;msgtype=response", recordId, extra, content, contentLength);
+    writeRecord(WARC_RESPONSE, date, "application/http; msgtype=response", recordId, extra, content, contentLength);
     return recordId;
   }
 
