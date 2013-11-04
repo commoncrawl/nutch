@@ -75,8 +75,11 @@ public interface Nutch {
   // time in ms it took us to fetch a page
   public static final String FETCH_DURATION_KEY = "cc.fetch.duration";
 
+  public static final Text WRITABLE_FETCH_DURATION_KEY = new Text(FETCH_DURATION_KEY);
+
   // robots.txt crawl delay if it exists
   public static final String CRAWL_DELAY_KEY = "cc.crawl.delay";
+  public static final Text WRITABLE_CRAWL_DELAY_KEY = new Text(CRAWL_DELAY_KEY);
 
   // IP address we fetched from
   public static final String FETCH_DEST_IP_KEY = "cc.dest.ip";
@@ -86,4 +89,10 @@ public interface Nutch {
 
   // Verbatim headers we fetched
   public static final String FETCH_RESPONSE_VERBATIM_HEADERS_KEY = "cc.response.headers.verbatim";
+
+  // Verbatim status line we fetched
+  public static final String FETCH_RESPONSE_VERBATIM_STATUS_KEY = "cc.response.status.verbatim";
+
+  // Raw status code we fetched
+  public static final String FETCH_RESPONSE_STATUS_CODE_KEY = "cc.response.status.code";
 }

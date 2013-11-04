@@ -11,6 +11,7 @@ import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.RecordWriter;
@@ -28,27 +29,36 @@ import org.apache.nutch.net.protocols.Response;
 import org.apache.nutch.parse.ParseData;
 import org.apache.nutch.parse.ParseText;
 import org.apache.nutch.protocol.Content;
+import org.apache.nutch.protocol.ProtocolStatus;
 import org.apache.nutch.util.HadoopFSUtil;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
 import org.apache.nutch.util.TimingUtil;
+import org.codehaus.jettison.json.JSONException;
+import org.codehaus.jettison.json.JSONObject;
 import org.commoncrawl.warc.WarcWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
 
 public class WarcExport extends Configured implements Tool {
   public static Logger LOG = LoggerFactory.getLogger(WarcExport.class);
@@ -99,22 +109,69 @@ public class WarcExport extends Configured implements Tool {
 
   public static class WarcOutputFormat extends FileOutputFormat<Text, CompleteData> {
     protected static class WarcRecordWriter implements RecordWriter<Text, CompleteData> {
-      private DataOutputStream out;
-      private WarcWriter writer;
+      private DataOutputStream warcOut;
+      private WarcWriter warcWriter;
+      private DataOutputStream textWarcOut;
+      private WarcWriter textWarcWriter;
+      private DataOutputStream watOut;
+      private WarcWriter watWriter;
       private URI warcinfoId;
+      private URI textWarcinfoId;
+      private String warcFilename;
       private final String CRLF = "\r\n";
+      private final String COLONSP = ": ";
 
-      public WarcRecordWriter(DataOutputStream out, String filename) {
-        this.out = out;
+      public WarcRecordWriter(FileSystem fs, JobConf job, Progressable progress, String filename, String textFilename,
+                              String hostname, String operator) throws IOException {
+        Path basedir = FileOutputFormat.getOutputPath(job);
+        this.warcFilename = filename;
 
-        writer = new WarcWriter(out);
+        warcOut = fs.create(new Path(new Path(basedir, "warc"), filename), progress);
+        warcWriter = new WarcWriter(warcOut);
+        warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, operator);
+
         try {
-          warcinfoId = writer.writeWarcinfoRecord(filename);
-          System.out.println("Writing warcinfo record");
-          System.out.println("Record ID: " + warcinfoId.toString());
-        } catch (IOException e) {
-          throw new RuntimeException(e);
+          JSONObject top = new JSONObject();
+          JSONObject container = new JSONObject();
+          JSONObject gzipMetadata = new JSONObject();
+          JSONObject envelope = new JSONObject();
+          JSONObject payloadMetadata = new JSONObject();
+
+          gzipMetadata.put("Deflate-Length", "TODO");
+          gzipMetadata.put("Footer-Length", "TODO");
+          gzipMetadata.put("Header-Length", "TODO");
+          gzipMetadata.put("Inflated-CRC", "TODO");
+          gzipMetadata.put("Inflated-Length", "TODO");
+
+          container.put("Compressed", true);
+          container.put("Filename", warcFilename);
+          container.put("Gzip-Metadata", gzipMetadata);
+          container.put("Offset", "0");
+
+          payloadMetadata.put("Actual-Content-Length", "TODO");
+          payloadMetadata.put("Actual-Content-Type", "application/warc-fields");
+
+
+          envelope.put("Format", "WARC");
+          envelope.put("Block-Digest", "TODO");
+          envelope.put("Actual-Content-Length", "TODO");
+          envelope.put("Payload-Metadata", payloadMetadata);
+
+          top.put("Container", container);
+          top.put("Envelope", envelope);
+
+          System.out.println(top.toString(2));
+        } catch (JSONException e) {
+
         }
+
+
+
+        textWarcOut = fs.create(new Path(new Path(basedir, "text"), textFilename), progress);
+        textWarcWriter = new WarcWriter(textWarcOut);
+        textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename, hostname, operator);
+
+        watOut = fs.create(new Path(new Path(basedir, "wat"), filename), progress);
       }
 
       public synchronized void write(Text key, CompleteData value) throws IOException {
@@ -126,14 +183,46 @@ public class WarcExport extends Configured implements Tool {
           return;
         }
 
-        String ip = null;
+        String ip = "0.0.0.0";
         Date date = null;
         boolean notModified = false;
         String verbatimResponseHeaders;
         String verbatimRequestHeaders = null;
-        String headers = new String();
+        String headers = "";
+        String statusLine = "";
+        String crawlDelay = null;
+        String payloadSignature = null;
 
         date = new Date(value.datum.getFetchTime());
+
+        // This is for older crawl dbs that don't include the verbatim status line in the metadata
+        ProtocolStatus pstatus = (ProtocolStatus)value.datum.getMetaData().get(Nutch.WRITABLE_PROTO_STATUS_KEY);
+        if (pstatus == null) {
+          return;
+        } else {
+          //System.out.println("Protocol status -");
+          //System.out.println(pstatus);
+          switch (pstatus.getCode()) {
+            case ProtocolStatus.SUCCESS:
+              statusLine = "HTTP/1.0 200 OK";
+              break;
+            case ProtocolStatus.TEMP_MOVED:
+              statusLine = "HTTP/1.0 302 Found";
+              break;
+            case ProtocolStatus.MOVED:
+              statusLine = "HTTP/1.0 301 Moved Permanently";
+              break;
+            case ProtocolStatus.NOTMODIFIED:
+              statusLine = "HTTP/1.0 304 Not Modified";
+              notModified = true;
+              break;
+            default:
+              if (value.parseData.getContentMeta().get(Nutch.FETCH_RESPONSE_VERBATIM_STATUS_KEY) == null) {
+                LOG.info("Unknown or ambiguous protocol status");
+                return;
+              }
+          }
+        }
 
         // Change this eventually
         boolean useVerbatimResponseHeaders = false;
@@ -147,9 +236,14 @@ public class WarcExport extends Configured implements Tool {
           } else if (name.equals(Nutch.FETCH_REQUEST_VERBATIM_KEY)) {
             verbatimRequestHeaders = value.parseData.getContentMeta().get(name);
           } else if (name.equals(Nutch.CRAWL_DELAY_KEY)) {
+            crawlDelay = value.parseData.getContentMeta().get(name);
           } else if (name.equals(Nutch.SIGNATURE_KEY)) {
+            payloadSignature = "md5:" + value.parseData.getContentMeta().get(name);
           } else if (name.equals(Nutch.FETCH_RESPONSE_VERBATIM_HEADERS_KEY)) {
             verbatimResponseHeaders = value.parseData.getContentMeta().get(name);
+          } else if (name.equals(Nutch.FETCH_RESPONSE_VERBATIM_STATUS_KEY)) {
+            statusLine = value.parseData.getContentMeta().get(name);
+          } else if (name.equals(Nutch.FETCH_RESPONSE_STATUS_CODE_KEY)) {
           } else {
             // We have to fix up a few headers because we don't have the raw responses
             if (name.equalsIgnoreCase("Content-Length")) {
@@ -161,41 +255,25 @@ public class WarcExport extends Configured implements Tool {
             }
           }
         }
-        headers += CRLF;
 
-        System.out.println("content.getMetadata()");
-        System.out.println(value.content.getMetadata().toString());
-        System.out.println(value.content.getMetadata().get(Response.CONTENT_LENGTH) + " vs " + value.content.getContent().length);
-
-
-        System.out.println("headers");
-        System.out.println("===========");
-        System.out.print(headers);
-
-        if (ip == null) {
-          System.out.println("IP is null, returning");
-          return;
+        String fetchDuration = value.datum.getMetaData().get(Nutch.WRITABLE_FETCH_DURATION_KEY).toString();
+        if (value.datum.getMetaData().get(Nutch.WRITABLE_CRAWL_DELAY_KEY) != null) {
+          crawlDelay = value.datum.getMetaData().get(Nutch.WRITABLE_CRAWL_DELAY_KEY).toString();
         }
+
 
         if (verbatimRequestHeaders == null) {
-          System.out.println("No request headers!");
+          LOG.info("No request headers!");
           return;
         }
-
-        System.out.println("\nIP: " + ip);
 
         StringBuilder requestsb = new StringBuilder(4096);
         requestsb.append(verbatimRequestHeaders);
 
-        System.out.println("Request headers:");
-        System.out.println("=================");
-        System.out.println(requestsb.toString());
-
         byte[] requestBytes = requestsb.toString().getBytes("utf-8");
         InputStream request = new ByteArrayInputStream(requestBytes);
 
-        System.out.println("About to write request record");
-        URI requestId = writer.writeWarcRequestRecord(targetUri, ip, date, warcinfoId, request, requestBytes.length);
+        URI requestId = warcWriter.writeWarcRequestRecord(targetUri, ip, date, warcinfoId, request, requestBytes.length);
 
         if (notModified) {
           String payloadDigest;
@@ -203,12 +281,12 @@ public class WarcExport extends Configured implements Tool {
           int abbreviatedResponseLength;
 
           /*
-          writer.writeWarcRevisitRecord(targetUri, ip, date, warcinfoId, requestId,
+          warcWriter.writeWarcRevisitRecord(targetUri, ip, date, warcinfoId, requestId,
               WarcWriter.PROFILE_REVISIT_NOT_MODIFIED, payloadDigest, abbreviatedResponse, abbreviatedResponseLength);
               */
         } else {
           StringBuilder responsesb = new StringBuilder(4096);
-          responsesb.append("HTTP/1.0 200 OK").append(CRLF);
+          responsesb.append(statusLine).append(CRLF);
           responsesb.append(headers).append(CRLF);
 
           byte[] responseHeaderBytes = responsesb.toString().getBytes("utf-8");
@@ -219,21 +297,78 @@ public class WarcExport extends Configured implements Tool {
 
           InputStream response = new ByteArrayInputStream(responseBytes);
 
-          writer.writeWarcResponseRecord(targetUri, ip, date, warcinfoId, requestId, null, response, responseBytes.length);
+          URI responseId = warcWriter.writeWarcResponseRecord(targetUri, ip, date, warcinfoId, requestId, payloadSignature,
+              response, responseBytes.length);
+
+
+          // Write text extract - should go in another file
+          byte[] conversionBytes = value.parseText.getText().getBytes("utf-8");
+          if (conversionBytes.length != 0) {
+            InputStream conversion = new ByteArrayInputStream(conversionBytes);
+
+            textWarcWriter.writeWarcConversionRecord(targetUri, date, textWarcinfoId, responseId, null, "text/plain",
+                conversion, conversionBytes.length);
+          }
+
+          // Write metadata record
+          StringBuilder metadatasb = new StringBuilder(4096);
+          Map<String, String> metadata = new LinkedHashMap<String, String>();
+
+          if (fetchDuration != null) {
+            metadata.put("fetchTimeMs", fetchDuration);
+          }
+
+          if (crawlDelay != null) {
+            metadata.put("robotsCrawlDelay", crawlDelay);
+          }
+
+          for (Map.Entry<String, String> entry : metadata.entrySet()) {
+            metadatasb.append(entry.getKey()).append(COLONSP).append(entry.getValue()).append(CRLF);
+          }
+          metadatasb.append(CRLF);
+
+          byte[] metadataBytes = metadatasb.toString().getBytes("utf-8");
+          InputStream metadataStream = new ByteArrayInputStream(metadataBytes);
+
+          warcWriter.writeWarcMetadataRecord(targetUri, date, warcinfoId, responseId, null, metadataStream,
+              metadataBytes.length);
         }
       }
 
       public synchronized void close(Reporter reporter) throws IOException {
-        out.close();
+        warcOut.close();
+        textWarcOut.close();
+        watOut.close();
       }
     }
 
     public RecordWriter<Text, CompleteData> getRecordWriter(FileSystem fs, JobConf job, String name,
                                                          Progressable progress) throws IOException {
-      Path dir = FileOutputFormat.getOutputPath(job);
-      String filename = name + ".warc.gz";
-      DataOutputStream fileOut = fs.create(new Path(dir, filename), progress);
-      return new WarcRecordWriter(fileOut, filename);
+      int partition = job.getInt(JobContext.TASK_PARTITION, -1);
+      if (partition == -1) {
+        throw new IllegalArgumentException("This method can only be called from within a Job");
+      }
+
+      NumberFormat numberFormat = NumberFormat.getInstance();
+      numberFormat.setMinimumIntegerDigits(5);
+      numberFormat.setGroupingUsed(false);
+
+      String prefix = job.get("warc.export.prefix", "CC-CRAWL");
+      String textPrefix = job.get("warc.export.textprefix", "CC-CRAWL-TEXT");
+
+      SimpleDateFormat fileDate = new SimpleDateFormat("yyyyMMddHHmmss");
+      fileDate.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+      String hostname = job.get("warc.export.hostname", "localhost");
+      String operator = job.get("warc.export.operator", null);
+
+      // WARC recommends - Prefix-Timestamp-Serial-Crawlhost.warc.gz
+      String filename = prefix + "-" + fileDate.format(new Date()) + "-" + numberFormat.format(partition) + "-" +
+          hostname + ".warc.gz";
+      String textFilename = textPrefix + "-" + fileDate.format(new Date()) + "-" + numberFormat.format(partition) + "-" +
+          hostname + ".warc.gz";
+
+      return new WarcRecordWriter(fs, job, progress, filename, textFilename, hostname, operator);
     }
   }
 
@@ -305,18 +440,34 @@ public class WarcExport extends Configured implements Tool {
     public void close() throws IOException { }
   }
 
+  public String getHostname() {
+    try {
+      Process p = Runtime.getRuntime().exec("hostname -f");
+      p.waitFor();
+      BufferedReader in = new BufferedReader(
+          new InputStreamReader(p.getInputStream()));
+      String hostname = in.readLine();
+      if (hostname != null && hostname.length() != 0 && p.exitValue() == 0) {
+        return hostname;
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+
+    return "localhost";
+  }
 
   public void export(Path outputDir, List<Path> segments,
                      boolean filter, boolean normalize) throws IOException {
 
-    System.out.println("In export!");
     final JobConf job = new NutchJob(getConf());
     job.setJobName("WarcExport");
 
     LOG.info("Exporter: URL filtering: " + filter);
     LOG.info("Exporter: URL normalizing: " + normalize);
 
-    System.out.println("Adding segments!");
     for (final Path segment : segments) {
       LOG.info("ExporterMapReduces: adding segment: " + segment);
       FileInputFormat.addInputPath(job, new Path(segment, CrawlDatum.FETCH_DIR_NAME));
@@ -332,28 +483,26 @@ public class WarcExport extends Configured implements Tool {
     job.setMapperClass(ExportMapReduce.class);
     job.setReducerClass(ExportMapReduce.class);
 
-    System.out.println("Beep");
-
     job.setOutputFormat(WarcOutputFormat.class);
     job.setMapOutputValueClass(NutchWritable.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(CompleteData.class);
 
-    System.out.println("Beep2");
+    // We compress ourselves, so this isn't necessary
+    job.setBoolean(org.apache.hadoop.mapreduce.lib.output.FileOutputFormat.COMPRESS, false);
+    job.set("warc.export.hostname", getHostname());
+
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     long start = System.currentTimeMillis();
     LOG.info("Exporter: starting at " + sdf.format(start));
 
     // job.setBoolean(ExportMapReduce.URL_FILTERING, filter);
     // job.setBoolean(ExportMapReduce.URL_NORMALIZING, normalize);
-    System.out.println("Beep3");
     job.setReduceSpeculativeExecution(false);
     FileOutputFormat.setOutputPath(job, outputDir);
 
-    System.out.println("Trying to run job");
     try {
       JobClient.runJob(job);
-      System.out.println("Wait what?");
       long end = System.currentTimeMillis();
       LOG.info("Exporter: finished at " + sdf.format(end) + ", elapsed: "
           + TimingUtil.elapsedTime(start, end));
@@ -364,7 +513,6 @@ public class WarcExport extends Configured implements Tool {
 
 
   public int run(String[] args) throws Exception {
-    System.out.println("hello there");
     if (args.length < 2) {
       System.err
           .println("Usage: WarcExport <outputdir> (<segment> ... | -dir <segments>) [-noCommit] [-filter] [-normalize]");

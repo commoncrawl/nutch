@@ -369,6 +369,8 @@ public class HttpResponse implements Response {
                               + "': " + e.getMessage(), e);
     }
 
+    headers.set(Nutch.FETCH_RESPONSE_VERBATIM_STATUS_KEY, line.toString());
+    headers.set(Nutch.FETCH_RESPONSE_STATUS_CODE_KEY, Integer.toString(code));
     return code;
   }
 

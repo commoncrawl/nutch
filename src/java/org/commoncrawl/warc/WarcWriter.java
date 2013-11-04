@@ -26,6 +26,8 @@ public class WarcWriter {
   private final String WARC_RESPONSE = "response";
   private final String WARC_REQUEST = "request";
   private final String WARC_REVISIT = "revisit";
+  private final String WARC_CONVERSION = "conversion";
+  private final String WARC_METADATA = "metadata";
 
   // Defined fields
   private final String WARC_TYPE = "WARC-Type";
@@ -74,7 +76,7 @@ public class WarcWriter {
    * @return record id for the warcinfo record
    * @throws IOException
    */
-  public URI writeWarcinfoRecord(String filename) throws IOException  {
+  public URI writeWarcinfoRecord(String filename, String hostname, String operator) throws IOException  {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_FILENAME, filename);
 
@@ -82,6 +84,10 @@ public class WarcWriter {
     Map<String, String> settings = new LinkedHashMap<String, String>();
 
     settings.put("robots", "classic");
+    settings.put("hostname", hostname);
+    if (operator != null) {
+      settings.put("operator", operator);
+    }
     writeWarcKeyValue(sb, settings);
 
     byte[] ba = sb.toString().getBytes("utf-8");
@@ -151,6 +157,43 @@ public class WarcWriter {
 
     URI recordId = getRecordId();
     writeRecord(WARC_RESPONSE, date, "application/http; msgtype=response", recordId, extra, content, contentLength);
+    return recordId;
+  }
+
+
+  public URI writeWarcMetadataRecord(final URI targetUri, final Date date,
+                                    final URI warcinfoId, final URI relatedId,
+                                    final String payloadDigest,
+                                    final InputStream content, final long contentLength) throws IOException {
+    Map<String, String> extra = new LinkedHashMap<String, String>();
+    extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
+    extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
+    extra.put(WARC_TARGET_URI, targetUri.toString());
+
+    if (payloadDigest != null) {
+      extra.put(WARC_PAYLOAD_DIGEST, payloadDigest);
+    }
+
+    URI recordId = getRecordId();
+    writeRecord(WARC_METADATA, date, "application/warc-fields", recordId, extra, content, contentLength);
+    return recordId;
+  }
+
+  public URI writeWarcConversionRecord(final URI targetUri, final Date date,
+                                     final URI warcinfoId, final URI relatedId,
+                                     final String payloadDigest, final String contentType,
+                                     final InputStream content, final long contentLength) throws IOException {
+    Map<String, String> extra = new LinkedHashMap<String, String>();
+    extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
+    extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
+    extra.put(WARC_TARGET_URI, targetUri.toString());
+
+    if (payloadDigest != null) {
+      extra.put(WARC_PAYLOAD_DIGEST, payloadDigest);
+    }
+
+    URI recordId = getRecordId();
+    writeRecord(WARC_CONVERSION, date, contentType, recordId, extra, content, contentLength);
     return recordId;
   }
 
