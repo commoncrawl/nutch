@@ -297,7 +297,6 @@ public class WarcExport extends Configured implements Tool {
       public synchronized void close(Reporter reporter) throws IOException {
         warcOut.close();
         textWarcOut.close();
-        watOut.close();
       }
     }
 
