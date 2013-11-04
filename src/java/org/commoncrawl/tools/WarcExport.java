@@ -349,8 +349,11 @@ public class WarcExport extends Configured implements Tool {
       implements Mapper<Text, Writable, Text, NutchWritable>,
       Reducer<Text, NutchWritable, Text, CompleteData> {
 
+    private NutchWritable tempWritable;
+
     public void configure(JobConf job) {
       setConf(job);
+      tempWritable = new NutchWritable();
     }
 
     public void map(Text key, Writable value,
@@ -363,7 +366,8 @@ public class WarcExport extends Configured implements Tool {
         key.set(urlString);
       }
 
-      output.collect(key, new NutchWritable(value));
+      tempWritable.set(value);
+      output.collect(key, tempWritable);
     }
 
     public void reduce(Text key, Iterator<NutchWritable> values,
