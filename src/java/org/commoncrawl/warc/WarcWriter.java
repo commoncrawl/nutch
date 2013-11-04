@@ -76,7 +76,8 @@ public class WarcWriter {
    * @return record id for the warcinfo record
    * @throws IOException
    */
-  public URI writeWarcinfoRecord(String filename, String hostname, String operator) throws IOException  {
+  public URI writeWarcinfoRecord(String filename, String hostname, String publisher, String operator, String software,
+                                 String isPartOf, String description) throws IOException  {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_FILENAME, filename);
 
@@ -84,10 +85,33 @@ public class WarcWriter {
     Map<String, String> settings = new LinkedHashMap<String, String>();
 
     settings.put("robots", "classic");
-    settings.put("hostname", hostname);
+    if (hostname != null) {
+      settings.put("hostname", hostname);
+    }
+
+    if (software != null) {
+      settings.put("software", software);
+    }
+
+    if (isPartOf != null) {
+      settings.put("isPartOf", isPartOf);
+    }
+
     if (operator != null) {
       settings.put("operator", operator);
     }
+
+    if (description != null) {
+      settings.put("description", description);
+    }
+
+    if (publisher != null) {
+      settings.put("publisher", publisher);
+    }
+
+    settings.put("format", "WARC File Format 1.0");
+    settings.put("conformsTo", "http://bibnum.bnf.fr/WARC/WARC_ISO_28500_version1_latestdraft.pdf");
+
     writeWarcKeyValue(sb, settings);
 
     byte[] ba = sb.toString().getBytes("utf-8");

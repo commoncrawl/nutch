@@ -120,17 +120,18 @@ public class WarcExport extends Configured implements Tool {
       private final String COLONSP = ": ";
 
       public WarcRecordWriter(FileSystem fs, JobConf job, Progressable progress, String filename, String textFilename,
-                              String hostname, String operator) throws IOException {
+                              String hostname, String publisher, String operator, String software, String isPartOf,
+                              String description) throws IOException {
         Path basedir = FileOutputFormat.getOutputPath(job);
         this.warcFilename = filename;
 
         warcOut = fs.create(new Path(new Path(basedir, "warc"), filename), progress);
         warcWriter = new WarcWriter(warcOut);
-        warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, operator);
+        warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
 
         textWarcOut = fs.create(new Path(new Path(basedir, "text"), textFilename), progress);
         textWarcWriter = new WarcWriter(textWarcOut);
-        textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename, hostname, operator);
+        textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename, hostname, publisher, operator, software, isPartOf, description);
       }
 
       public synchronized void write(Text key, CompleteData value) throws IOException {
@@ -318,7 +319,12 @@ public class WarcExport extends Configured implements Tool {
       fileDate.setTimeZone(TimeZone.getTimeZone("GMT"));
 
       String hostname = job.get("warc.export.hostname", "localhost");
+      String publisher = job.get("warc.export.publisher", null);
       String operator = job.get("warc.export.operator", null);
+      String software = job.get("warc.export.software", null);
+      String isPartOf = job.get("warc.export.isPartOf", null);
+      String description = job.get("warc.export.description", null);
+
 
       // WARC recommends - Prefix-Timestamp-Serial-Crawlhost.warc.gz
       String filename = prefix + "-" + fileDate.format(new Date()) + "-" + numberFormat.format(partition) + "-" +
@@ -326,7 +332,8 @@ public class WarcExport extends Configured implements Tool {
       String textFilename = textPrefix + "-" + fileDate.format(new Date()) + "-" + numberFormat.format(partition) + "-" +
           hostname + ".warc.gz";
 
-      return new WarcRecordWriter(fs, job, progress, filename, textFilename, hostname, operator);
+      return new WarcRecordWriter(fs, job, progress, filename, textFilename, hostname, publisher, operator, software,
+          isPartOf, description);
     }
   }
 
