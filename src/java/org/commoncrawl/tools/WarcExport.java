@@ -312,11 +312,12 @@ public class WarcExport extends Configured implements Tool {
       numberFormat.setMinimumIntegerDigits(5);
       numberFormat.setGroupingUsed(false);
 
-      String prefix = job.get("warc.export.prefix", "CC-CRAWL");
-      String textPrefix = job.get("warc.export.textprefix", "CC-CRAWL-TEXT");
-
       SimpleDateFormat fileDate = new SimpleDateFormat("yyyyMMddHHmmss");
       fileDate.setTimeZone(TimeZone.getTimeZone("GMT"));
+
+      String prefix = job.get("warc.export.prefix", "CC-CRAWL");
+      String textPrefix = job.get("warc.export.textprefix", "CC-CRAWL-TEXT");
+      String prefixDate = job.get("warc.export.date", fileDate.format(new Date()));
 
       String hostname = job.get("warc.export.hostname", "localhost");
       String publisher = job.get("warc.export.publisher", null);
@@ -327,9 +328,9 @@ public class WarcExport extends Configured implements Tool {
 
 
       // WARC recommends - Prefix-Timestamp-Serial-Crawlhost.warc.gz
-      String filename = prefix + "-" + fileDate.format(new Date()) + "-" + numberFormat.format(partition) + "-" +
+      String filename = prefix + "-" + prefixDate + "-" + numberFormat.format(partition) + "-" +
           hostname + ".warc.gz";
-      String textFilename = textPrefix + "-" + fileDate.format(new Date()) + "-" + numberFormat.format(partition) + "-" +
+      String textFilename = textPrefix + "-" + prefixDate + "-" + numberFormat.format(partition) + "-" +
           hostname + ".warc.gz";
 
       return new WarcRecordWriter(fs, job, progress, filename, textFilename, hostname, publisher, operator, software,
