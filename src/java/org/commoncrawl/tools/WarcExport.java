@@ -113,8 +113,6 @@ public class WarcExport extends Configured implements Tool {
       private WarcWriter warcWriter;
       private DataOutputStream textWarcOut;
       private WarcWriter textWarcWriter;
-      private DataOutputStream watOut;
-      private WarcWriter watWriter;
       private URI warcinfoId;
       private URI textWarcinfoId;
       private String warcFilename;
@@ -130,48 +128,9 @@ public class WarcExport extends Configured implements Tool {
         warcWriter = new WarcWriter(warcOut);
         warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, operator);
 
-        try {
-          JSONObject top = new JSONObject();
-          JSONObject container = new JSONObject();
-          JSONObject gzipMetadata = new JSONObject();
-          JSONObject envelope = new JSONObject();
-          JSONObject payloadMetadata = new JSONObject();
-
-          gzipMetadata.put("Deflate-Length", "TODO");
-          gzipMetadata.put("Footer-Length", "TODO");
-          gzipMetadata.put("Header-Length", "TODO");
-          gzipMetadata.put("Inflated-CRC", "TODO");
-          gzipMetadata.put("Inflated-Length", "TODO");
-
-          container.put("Compressed", true);
-          container.put("Filename", warcFilename);
-          container.put("Gzip-Metadata", gzipMetadata);
-          container.put("Offset", "0");
-
-          payloadMetadata.put("Actual-Content-Length", "TODO");
-          payloadMetadata.put("Actual-Content-Type", "application/warc-fields");
-
-
-          envelope.put("Format", "WARC");
-          envelope.put("Block-Digest", "TODO");
-          envelope.put("Actual-Content-Length", "TODO");
-          envelope.put("Payload-Metadata", payloadMetadata);
-
-          top.put("Container", container);
-          top.put("Envelope", envelope);
-
-          System.out.println(top.toString(2));
-        } catch (JSONException e) {
-
-        }
-
-
-
         textWarcOut = fs.create(new Path(new Path(basedir, "text"), textFilename), progress);
         textWarcWriter = new WarcWriter(textWarcOut);
         textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename, hostname, operator);
-
-        watOut = fs.create(new Path(new Path(basedir, "wat"), filename), progress);
       }
 
       public synchronized void write(Text key, CompleteData value) throws IOException {
