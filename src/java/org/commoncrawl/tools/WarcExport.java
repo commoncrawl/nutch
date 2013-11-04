@@ -11,13 +11,13 @@ import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
+import org.apache.hadoop.mapred.TaskID;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
@@ -25,7 +25,6 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.nutch.crawl.NutchWritable;
 import org.apache.nutch.metadata.Nutch;
-import org.apache.nutch.net.protocols.Response;
 import org.apache.nutch.parse.ParseData;
 import org.apache.nutch.parse.ParseText;
 import org.apache.nutch.protocol.Content;
@@ -34,6 +33,7 @@ import org.apache.nutch.util.HadoopFSUtil;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
 import org.apache.nutch.util.TimingUtil;
+import org.apache.hadoop.mapred.TaskAttemptID;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.commoncrawl.warc.WarcWriter;
@@ -303,10 +303,17 @@ public class WarcExport extends Configured implements Tool {
 
     public RecordWriter<Text, CompleteData> getRecordWriter(FileSystem fs, JobConf job, String name,
                                                          Progressable progress) throws IOException {
+      TaskID taskId = TaskAttemptID.forName(job.get("mapred.task.id")).getTaskID();
+      int partition = taskId.getId();
+      System.out.println("Partition: " + partition);
+
+      /*
       int partition = job.getInt(JobContext.TASK_PARTITION, -1);
       if (partition == -1) {
         throw new IllegalArgumentException("This method can only be called from within a Job");
       }
+      */
+
 
       NumberFormat numberFormat = NumberFormat.getInstance();
       numberFormat.setMinimumIntegerDigits(5);
