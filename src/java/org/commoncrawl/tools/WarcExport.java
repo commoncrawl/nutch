@@ -7,8 +7,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
+import org.apache.hadoop.mapred.InvalidJobConfException;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Mapper;
@@ -18,6 +20,7 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.TaskID;
+import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
@@ -342,6 +345,28 @@ public class WarcExport extends Configured implements Tool {
 
       return new WarcRecordWriter(fs, job, progress, filename, textFilename, hostname, publisher, operator, software,
           isPartOf, description);
+    }
+
+    @Override
+    public void checkOutputSpecs(FileSystem ignored, JobConf job)
+        throws FileAlreadyExistsException,
+        InvalidJobConfException, IOException {
+      // Ensure that the output directory is set and not already there
+      Path outDir = getOutputPath(job);
+      if (outDir == null && job.getNumReduceTasks() != 0) {
+        throw new InvalidJobConfException("Output directory not set in JobConf.");
+      }
+      if (outDir != null) {
+        FileSystem fs = outDir.getFileSystem(job);
+        // normalize the output directory
+        outDir = fs.makeQualified(outDir);
+        setOutputPath(job, outDir);
+
+        // get delegation token for the outDir's file system
+        TokenCache.obtainTokensForNamenodes(job.getCredentials(),
+            new Path[]{outDir}, job);
+
+      }
     }
   }
 
