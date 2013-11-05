@@ -39,7 +39,10 @@ public class WarcWriter {
   private final String WARC_WARCINFO_ID = "WARC-Warcinfo-ID";
   private final String WARC_TARGET_URI = "WARC-Target-URI";
   private final String WARC_CONCURRENT_TO = "WARC-Concurrent-To";
+  private final String WARC_REFERS_TO = "WARC-Refers-To";
+  private final String WARC_BLOCK_DIGEST = "WARC-Block-Digest";
   private final String WARC_PAYLOAD_DIGEST = "WARC-Payload-Digest";
+  private final String WARC_IDENTIFIED_PAYLOAD_TYPE = "WARC-Identified-Payload-Type";
   private final String WARC_PROFILE = "WARC-Profile";
   private final String WARC_FILENAME = "WARC-Filename";
 
@@ -148,7 +151,7 @@ public class WarcWriter {
 
   public URI writeWarcResponseRecord(final URI targetUri, final String ip, final Date date,
                                     final URI warcinfoId, final URI relatedId, final String payloadDigest,
-                                    final InputStream content, final long contentLength) throws IOException {
+                                    final String blockDigest, final InputStream content, final long contentLength) throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
     extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
@@ -157,6 +160,10 @@ public class WarcWriter {
 
     if (payloadDigest != null) {
       extra.put(WARC_PAYLOAD_DIGEST, payloadDigest);
+    }
+
+    if (blockDigest != null) {
+      extra.put(WARC_BLOCK_DIGEST, blockDigest);
     }
 
     URI recordId = getRecordId();
@@ -170,7 +177,7 @@ public class WarcWriter {
                                      final InputStream content, final long contentLength) throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
-    extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
+    extra.put(WARC_REFERS_TO, "<" + relatedId.toString() + ">");
     extra.put(WARC_IP_ADDRESS, ip);
     extra.put(WARC_TARGET_URI, targetUri.toString());
     extra.put(WARC_PROFILE, warcProfile);
@@ -187,15 +194,15 @@ public class WarcWriter {
 
   public URI writeWarcMetadataRecord(final URI targetUri, final Date date,
                                     final URI warcinfoId, final URI relatedId,
-                                    final String payloadDigest,
+                                    final String blockDigest,
                                     final InputStream content, final long contentLength) throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
     extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
     extra.put(WARC_TARGET_URI, targetUri.toString());
 
-    if (payloadDigest != null) {
-      extra.put(WARC_PAYLOAD_DIGEST, payloadDigest);
+    if (blockDigest != null) {
+      extra.put(WARC_BLOCK_DIGEST, blockDigest);
     }
 
     URI recordId = getRecordId();
@@ -205,15 +212,15 @@ public class WarcWriter {
 
   public URI writeWarcConversionRecord(final URI targetUri, final Date date,
                                      final URI warcinfoId, final URI relatedId,
-                                     final String payloadDigest, final String contentType,
+                                     final String blockDigest, final String contentType,
                                      final InputStream content, final long contentLength) throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
-    extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
+    extra.put(WARC_REFERS_TO, "<" + relatedId.toString() + ">");
     extra.put(WARC_TARGET_URI, targetUri.toString());
 
-    if (payloadDigest != null) {
-      extra.put(WARC_PAYLOAD_DIGEST, payloadDigest);
+    if (blockDigest != null) {
+      extra.put(WARC_BLOCK_DIGEST, blockDigest);
     }
 
     URI recordId = getRecordId();

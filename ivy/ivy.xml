@@ -76,6 +76,8 @@
 		<dependency org="com.google.guava" name="guava" rev="11.0.2" />
                 <dependency org="com.google.code.crawler-commons" name="crawler-commons" rev="0.2" />
 
+                <dependency org="commons-codec" name="commons-codec" rev="1.8" />
+
 		<!--Configuration: test -->
 
 		<!--artifacts needed for testing -->
