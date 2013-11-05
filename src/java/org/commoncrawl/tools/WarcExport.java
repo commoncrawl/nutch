@@ -5,6 +5,7 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.FileAlreadyExistsException;
@@ -26,6 +27,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.crawl.CrawlDatum;
+import org.apache.nutch.crawl.NullOutputCommitter;
 import org.apache.nutch.crawl.NutchWritable;
 import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.parse.ParseData;
@@ -497,6 +499,13 @@ public class WarcExport extends Configured implements Tool {
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     long start = System.currentTimeMillis();
     LOG.info("Exporter: starting at " + sdf.format(start));
+
+    // S3 driver does an MD5 verification after uploading
+    // Also, this is painfully slow because of S3's slow copy functions
+
+    if (outputDir.getFileSystem(getConf()) instanceof NativeS3FileSystem) {
+      job.setOutputCommitter(NullOutputCommitter.class);
+    }
 
     // job.setBoolean(ExportMapReduce.URL_FILTERING, filter);
     // job.setBoolean(ExportMapReduce.URL_NORMALIZING, normalize);
