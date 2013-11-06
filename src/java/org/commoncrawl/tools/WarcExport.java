@@ -74,14 +74,12 @@ public class WarcExport extends Configured implements Tool {
     public CrawlDatum datum;
     public Content content;
     public ParseText parseText;
-    //public ParseData parseData;
 
     public CompleteData() {
       url = new Text();
       datum = new CrawlDatum();
       content = new Content();
       parseText = new ParseText();
-      //parseData = new ParseData();
     }
 
     public CompleteData(Text url, CrawlDatum datum, Content content, ParseText parseText) {
@@ -93,8 +91,6 @@ public class WarcExport extends Configured implements Tool {
       } else {
         this.parseText = new ParseText();
       }
-
-      //this.parseData = parseData;
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -102,7 +98,6 @@ public class WarcExport extends Configured implements Tool {
       datum.readFields(in);
       content.readFields(in);
       parseText.readFields(in);
-      //parseData.readFields(in);
     }
 
     public void write(DataOutput out) throws IOException {
@@ -110,7 +105,6 @@ public class WarcExport extends Configured implements Tool {
       datum.write(out);
       content.write(out);
       parseText.write(out);
-      //parseData.write(out);
     }
 
     public String toString() {
@@ -213,7 +207,6 @@ public class WarcExport extends Configured implements Tool {
           }
         }
 
-        // Change this once we're done processing our old broken headers that were missing newlines
         boolean useVerbatimResponseHeaders = false;
 
         for (String name : value.content.getMetadata().names()) {
@@ -231,7 +224,6 @@ public class WarcExport extends Configured implements Tool {
           } else if (name.equals(Nutch.FETCH_RESPONSE_VERBATIM_HEADERS_KEY)) {
             verbatimResponseHeaders = value.content.getMetadata().get(name);
             if (verbatimResponseHeaders.contains(CRLF)) {
-              System.out.println("Headers contain CRLF");
               useVerbatimResponseHeaders = true;
             }
           } else if (name.equals(Nutch.FETCH_RESPONSE_VERBATIM_STATUS_KEY)) {
@@ -261,7 +253,6 @@ public class WarcExport extends Configured implements Tool {
         }
 
         if (useVerbatimResponseHeaders && verbatimResponseHeaders != null) {
-          System.out.println("Using verbatimResponseHeaders");
           headers = verbatimResponseHeaders;
         }
 
@@ -515,15 +506,22 @@ public class WarcExport extends Configured implements Tool {
 
     for (final Path segment : segments) {
       LOG.info("ExporterMapReduces: adding segment: " + segment);
+      FileSystem fs = segment.getFileSystem(getConf());
+
       FileInputFormat.addInputPath(job, new Path(segment, CrawlDatum.FETCH_DIR_NAME));
 
       Path parseDataPath = new Path(segment, ParseData.DIR_NAME);
-      if (parseDataPath.getFileSystem(getConf()).exists(parseDataPath)) {
+      if (fs.exists(parseDataPath)) {
         FileInputFormat.addInputPath(job, parseDataPath);
       }
 
+      Path parseTextPath = new Path(segment, ParseText.DIR_NAME);
       if (generateText) {
-        FileInputFormat.addInputPath(job, new Path(segment, ParseText.DIR_NAME));
+        if (fs.exists(parseTextPath)) {
+          FileInputFormat.addInputPath(job, parseTextPath);
+        } else {
+          LOG.warn("ParseText path doesn't exist: ", parseTextPath.toString());
+        }
       }
 
       FileInputFormat.addInputPath(job, new Path(segment, Content.DIR_NAME));
