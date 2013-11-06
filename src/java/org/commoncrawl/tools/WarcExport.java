@@ -317,16 +317,18 @@ public class WarcExport extends Configured implements Tool {
           warcWriter.writeWarcMetadataRecord(targetUri, date, warcinfoId, responseId, null, metadataStream,
               metadataBytes.length);
 
-
+          // Write text extract
           if (generateText && value.parseText != null) {
-            // Write text extract - should go in another file
-            byte[] conversionBytes = value.parseText.getText().getBytes("utf-8");
-            if (conversionBytes.length != 0) {
-              InputStream conversion = new ByteArrayInputStream(conversionBytes);
+            final String text = value.parseText.getText();
+            if (text != null) {
+              byte[] conversionBytes = value.parseText.getText().getBytes("utf-8");
+              if (conversionBytes.length != 0) {
+                InputStream conversion = new ByteArrayInputStream(conversionBytes);
 
-              textBlockSignature = getSha1DigestWithAlg(conversionBytes);
-              textWarcWriter.writeWarcConversionRecord(targetUri, date, textWarcinfoId, responseId, textBlockSignature,
+                textBlockSignature = getSha1DigestWithAlg(conversionBytes);
+                textWarcWriter.writeWarcConversionRecord(targetUri, date, textWarcinfoId, responseId, textBlockSignature,
                   "text/plain", conversion, conversionBytes.length);
+              }
             }
           }
         }
@@ -520,7 +522,7 @@ public class WarcExport extends Configured implements Tool {
         if (fs.exists(parseTextPath)) {
           FileInputFormat.addInputPath(job, parseTextPath);
         } else {
-          LOG.warn("ParseText path doesn't exist: ", parseTextPath.toString());
+          LOG.warn("ParseText path doesn't exist: " + parseTextPath.toString());
         }
       }
 
