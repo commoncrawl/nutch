@@ -1,6 +1,5 @@
 package org.commoncrawl.tools;
 
-
 import org.apache.commons.codec.binary.Base32;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileStatus;
@@ -9,7 +8,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.InvalidJobConfException;
@@ -75,13 +73,6 @@ public class WarcExport extends Configured implements Tool {
     public Content content;
     public ParseText parseText;
 
-    public CompleteData() {
-      url = new Text();
-      datum = new CrawlDatum();
-      content = new Content();
-      parseText = new ParseText();
-    }
-
     public CompleteData(Text url, CrawlDatum datum, Content content, ParseText parseText) {
       this.url = url;
       this.datum = datum;
@@ -131,13 +122,15 @@ public class WarcExport extends Configured implements Tool {
                               String description, boolean generateText) throws IOException {
         Path basedir = FileOutputFormat.getOutputPath(job);
 
-        warcOut = fs.create(new Path(new Path(basedir, "warc"), filename), progress);
+        FileSystem fs2 = basedir.getFileSystem(job);
+
+        warcOut = fs2.create(new Path(new Path(basedir, "warc"), filename), progress);
         warcWriter = new WarcWriter(warcOut);
         warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
 
         this.generateText = generateText;
         if (generateText) {
-          textWarcOut = fs.create(new Path(new Path(basedir, "text"), textFilename), progress);
+          textWarcOut = fs2.create(new Path(new Path(basedir, "text"), textFilename), progress);
           textWarcWriter = new WarcWriter(textWarcOut);
           textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename, hostname, publisher, operator, software, isPartOf, description);
         }
@@ -167,16 +160,13 @@ public class WarcExport extends Configured implements Tool {
         }
 
         String ip = "0.0.0.0";
-        Date date = null;
+        Date date;
         boolean notModified = false;
         String verbatimResponseHeaders = null;
         String verbatimRequestHeaders = null;
         String headers = "";
         String statusLine = "";
         String crawlDelay = null;
-        String payloadSignature = null;
-        String blockSignature = null;
-        String textBlockSignature = null;
 
         date = new Date(value.datum.getFetchTime());
 
@@ -220,7 +210,6 @@ public class WarcExport extends Configured implements Tool {
           } else if (name.equals(Nutch.CRAWL_DELAY_KEY)) {
             crawlDelay = value.content.getMetadata().get(name);
           } else if (name.equals(Nutch.SIGNATURE_KEY)) {
-            payloadSignature = "md5:" + value.content.getMetadata().get(name);
           } else if (name.equals(Nutch.FETCH_RESPONSE_VERBATIM_HEADERS_KEY)) {
             verbatimResponseHeaders = value.content.getMetadata().get(name);
             if (verbatimResponseHeaders.contains(CRLF)) {
@@ -283,16 +272,11 @@ public class WarcExport extends Configured implements Tool {
           System.arraycopy(value.content.getContent(), 0, responseBytes, responseHeaderBytes.length,
               value.content.getContent().length);
 
-          sha1.reset();
-          payloadSignature = getSha1DigestWithAlg(value.content.getContent());
-
-          sha1.reset();
-          blockSignature = getSha1DigestWithAlg(responseBytes);
-
           InputStream response = new ByteArrayInputStream(responseBytes);
 
           URI responseId = warcWriter.writeWarcResponseRecord(targetUri, ip, date, warcinfoId, requestId,
-              payloadSignature, blockSignature, response, responseBytes.length);
+              getSha1DigestWithAlg(value.content.getContent()), getSha1DigestWithAlg(responseBytes), response,
+              responseBytes.length);
 
           // Write metadata record
           StringBuilder metadatasb = new StringBuilder(4096);
@@ -325,9 +309,8 @@ public class WarcExport extends Configured implements Tool {
               if (conversionBytes.length != 0) {
                 InputStream conversion = new ByteArrayInputStream(conversionBytes);
 
-                textBlockSignature = getSha1DigestWithAlg(conversionBytes);
-                textWarcWriter.writeWarcConversionRecord(targetUri, date, textWarcinfoId, responseId, textBlockSignature,
-                  "text/plain", conversion, conversionBytes.length);
+                textWarcWriter.writeWarcConversionRecord(targetUri, date, textWarcinfoId, responseId,
+                    getSha1DigestWithAlg(conversionBytes),"text/plain", conversion, conversionBytes.length);
               }
             }
           }
@@ -388,8 +371,7 @@ public class WarcExport extends Configured implements Tool {
 
     @Override
     public void checkOutputSpecs(FileSystem ignored, JobConf job)
-        throws FileAlreadyExistsException,
-        InvalidJobConfException, IOException {
+        throws IOException {
       // Ensure that the output directory is set and not already there
       Path outDir = getOutputPath(job);
       if (outDir == null && job.getNumReduceTasks() != 0) {
@@ -437,7 +419,6 @@ public class WarcExport extends Configured implements Tool {
     public void reduce(Text key, Iterator<NutchWritable> values,
                        OutputCollector<Text, CompleteData> output, Reporter reporter)
         throws IOException {
-      Text url = key;
       CrawlDatum datum = null;
       Content content = null;
       ParseText parseText = null;
@@ -452,7 +433,7 @@ public class WarcExport extends Configured implements Tool {
           String robotsMeta = parseData.getMeta("robots");
 
           // Has it a noindex for this url?
-          if (robotsMeta != null && robotsMeta.toLowerCase().indexOf("noindex") != -1) {
+          if (robotsMeta != null && robotsMeta.toLowerCase().contains("noindex")) {
             return;
           }
         } else if (value instanceof ParseText) {
@@ -470,9 +451,9 @@ public class WarcExport extends Configured implements Tool {
         return;
       }
 
-      CompleteData completeData = new CompleteData(url, datum, content, parseText);
+      CompleteData completeData = new CompleteData(key, datum, content, parseText);
 
-      output.collect(url, completeData);
+      output.collect(key, completeData);
 
     }
 
