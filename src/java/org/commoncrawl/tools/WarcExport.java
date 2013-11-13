@@ -534,7 +534,8 @@ public class WarcExport extends Configured implements Tool {
     // S3 driver does an MD5 verification after uploading
     // Also, this is painfully slow because of S3's slow copy functions
 
-    if (outputDir.getFileSystem(getConf()) instanceof NativeS3FileSystem) {
+    if (outputDir.getFileSystem(getConf()) instanceof NativeS3FileSystem ||
+        outputDir.getFileSystem(getConf()).getScheme().equals("s3a")) {
       job.setOutputCommitter(NullOutputCommitter.class);
     }
 
