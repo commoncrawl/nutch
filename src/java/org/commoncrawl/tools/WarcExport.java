@@ -310,7 +310,7 @@ public class WarcExport extends Configured implements Tool {
     public RecordWriter<Text, CompleteData> getRecordWriter(TaskAttemptContext context) throws IOException {
       TaskID taskid = context.getTaskAttemptID().getTaskID();
       int partition = taskid.getId();
-      System.out.println("Partition: " + partition);
+      LOG.info("Partition: " + partition);
 
 
       NumberFormat numberFormat = NumberFormat.getInstance();
