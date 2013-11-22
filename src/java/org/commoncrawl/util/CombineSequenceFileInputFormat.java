@@ -18,40 +18,38 @@ package org.commoncrawl.util;
  * limitations under the License.
  */
 
-import java.io.IOException;
-import java.util.List;
-
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.MapFile;
-import org.apache.hadoop.mapred.InputSplit;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.RecordReader;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.SequenceFileInputFormat;
-import org.apache.hadoop.mapred.lib.CombineFileInputFormat;
-import org.apache.hadoop.mapred.lib.CombineFileRecordReader;
-import org.apache.hadoop.mapred.lib.CombineFileSplit;
+import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.CombineFileRecordReader;
+import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit;
+import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
+
+import java.io.IOException;
+import java.util.List;
 
 /**
  * Input format that is a <code>CombineFileInputFormat</code>-equivalent for
  * <code>SequenceFileInputFormat</code>.
  *
- * @see org.apache.hadoop.mapred.lib.CombineFileInputFormat
+ * @see org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat
  */
 @InterfaceAudience.Public
 @InterfaceStability.Stable
 public class CombineSequenceFileInputFormat<K,V>
     extends CombineFileInputFormat<K,V> {
   @SuppressWarnings({ "rawtypes", "unchecked" })
-  public RecordReader<K,V> getRecordReader(InputSplit split, JobConf conf,
-                                           Reporter reporter) throws IOException {
-    return new CombineFileRecordReader(conf, (CombineFileSplit)split, reporter,
+  public RecordReader<K,V> createRecordReader(InputSplit split,
+                                              TaskAttemptContext context) throws IOException {
+    return new CombineFileRecordReader((CombineFileSplit)split, context,
         SequenceFileRecordReaderWrapper.class);
   }
 
@@ -62,19 +60,20 @@ public class CombineSequenceFileInputFormat<K,V>
    *
    * @see CombineFileRecordReader
    * @see CombineFileInputFormat
-   * @see SequenceFileInputFormat
+   * @see org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat
    */
   private static class SequenceFileRecordReaderWrapper<K,V>
       extends CombineFileRecordReaderWrapper<K,V> {
     // this constructor signature is required by CombineFileRecordReader
     public SequenceFileRecordReaderWrapper(CombineFileSplit split,
-                                           Configuration conf, Reporter reporter, Integer idx) throws IOException {
-      super(new SequenceFileInputFormat<K,V>(), split, conf, reporter, idx);
+                                           TaskAttemptContext context, Integer idx)
+        throws IOException, InterruptedException {
+      super(new SequenceFileInputFormat<K,V>(), split, context, idx);
     }
   }
 
   @Override
-  protected List<FileStatus> listStatus(JobContext job)throws IOException {
+  protected List<FileStatus> listStatus(JobContext job) throws IOException {
     List<FileStatus> files = super.listStatus(job);
     int len = files.size();
     for(int i=0; i < len; ++i) {
@@ -84,22 +83,6 @@ public class CombineSequenceFileInputFormat<K,V>
         FileSystem fs = p.getFileSystem(job.getConfiguration());
         // use the data file
         files.set(i, fs.getFileStatus(new Path(p, MapFile.DATA_FILE_NAME)));
-      }
-    }
-    return files;
-  }
-
-
-  @Override
-  protected FileStatus[] listStatus(JobConf job) throws IOException {
-    FileStatus[] files = super.listStatus(job);
-    for (int i = 0; i < files.length; i++) {
-      FileStatus file = files[i];
-      if (file.isDirectory()) {     // it's a MapFile
-        Path dataFile = new Path(file.getPath(), MapFile.DATA_FILE_NAME);
-        FileSystem fs = file.getPath().getFileSystem(job);
-        // use the data file
-        files[i] = fs.getFileStatus(dataFile);
       }
     }
     return files;

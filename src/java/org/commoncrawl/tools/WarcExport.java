@@ -1,31 +1,31 @@
 package org.commoncrawl.tools;
 
 import org.apache.commons.codec.binary.Base32;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.InvalidJobConfException;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.Mapper;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.RecordWriter;
-import org.apache.hadoop.mapred.Reducer;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.TaskID;
-import org.apache.hadoop.mapred.lib.MultipleInputs;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.OutputCommitter;
+import org.apache.hadoop.mapreduce.RecordWriter;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.TaskID;
+import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.security.TokenCache;
-import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.crawl.CrawlDatum;
-import org.apache.nutch.crawl.NullOutputCommitter;
 import org.apache.nutch.crawl.NutchWritable;
 import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.parse.ParseData;
@@ -34,10 +34,8 @@ import org.apache.nutch.protocol.Content;
 import org.apache.nutch.protocol.ProtocolStatus;
 import org.apache.nutch.util.HadoopFSUtil;
 import org.apache.nutch.util.NutchConfiguration;
-import org.apache.nutch.util.NutchJob;
-import org.apache.nutch.util.TimingUtil;
-import org.apache.hadoop.mapred.TaskAttemptID;
 import org.commoncrawl.util.CombineSequenceFileInputFormat;
+import org.commoncrawl.util.NullOutputCommitter;
 import org.commoncrawl.warc.WarcWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,7 +100,9 @@ public class WarcExport extends Configured implements Tool {
   }
 
   public static class WarcOutputFormat extends FileOutputFormat<Text, CompleteData> {
-    protected static class WarcRecordWriter implements RecordWriter<Text, CompleteData> {
+    private OutputCommitter committer;
+
+    protected static class WarcRecordWriter extends RecordWriter<Text, CompleteData> {
       private DataOutputStream warcOut;
       private WarcWriter warcWriter;
       private DataOutputStream textWarcOut;
@@ -115,20 +115,20 @@ public class WarcExport extends Configured implements Tool {
       private Base32 base32 = null;
       private boolean generateText;
 
-      public WarcRecordWriter(FileSystem fs, JobConf job, Progressable progress, String filename, String textFilename,
+      public WarcRecordWriter(TaskAttemptContext context, Path outputPath, String filename, String textFilename,
                               String hostname, String publisher, String operator, String software, String isPartOf,
                               String description, boolean generateText) throws IOException {
-        Path basedir = FileOutputFormat.getOutputPath(job);
 
-        FileSystem fs2 = basedir.getFileSystem(job);
 
-        warcOut = fs2.create(new Path(new Path(basedir, "warc"), filename), progress);
+        FileSystem fs = outputPath.getFileSystem(context.getConfiguration());
+
+        warcOut = fs.create(new Path(new Path(outputPath, "warc"), filename));
         warcWriter = new WarcWriter(warcOut);
         warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
 
         this.generateText = generateText;
         if (generateText) {
-          textWarcOut = fs2.create(new Path(new Path(basedir, "text"), textFilename), progress);
+          textWarcOut = fs.create(new Path(new Path(outputPath, "text"), textFilename));
           textWarcWriter = new WarcWriter(textWarcOut);
           textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename, hostname, publisher, operator, software, isPartOf, description);
         }
@@ -300,7 +300,7 @@ public class WarcExport extends Configured implements Tool {
         }
       }
 
-      public synchronized void close(Reporter reporter) throws IOException {
+      public synchronized void close(TaskAttemptContext context) throws IOException {
         warcOut.close();
         if (generateText) {
           textWarcOut.close();
@@ -308,18 +308,10 @@ public class WarcExport extends Configured implements Tool {
       }
     }
 
-    public RecordWriter<Text, CompleteData> getRecordWriter(FileSystem fs, JobConf job, String name,
-                                                         Progressable progress) throws IOException {
-      TaskID taskId = TaskAttemptID.forName(job.get("mapred.task.id")).getTaskID();
-      int partition = taskId.getId();
+    public RecordWriter<Text, CompleteData> getRecordWriter(TaskAttemptContext context) throws IOException {
+      TaskID taskid = context.getTaskAttemptID().getTaskID();
+      int partition = taskid.getId();
       System.out.println("Partition: " + partition);
-
-      /*
-      int partition = job.getInt(JobContext.TASK_PARTITION, -1);
-      if (partition == -1) {
-        throw new IllegalArgumentException("This method can only be called from within a Job");
-      }
-      */
 
 
       NumberFormat numberFormat = NumberFormat.getInstance();
@@ -329,17 +321,19 @@ public class WarcExport extends Configured implements Tool {
       SimpleDateFormat fileDate = new SimpleDateFormat("yyyyMMddHHmmss");
       fileDate.setTimeZone(TimeZone.getTimeZone("GMT"));
 
-      String prefix = job.get("warc.export.prefix", "CC-CRAWL");
-      String textPrefix = job.get("warc.export.textprefix", "CC-CRAWL-TEXT");
-      String prefixDate = job.get("warc.export.date", fileDate.format(new Date()));
+      Configuration conf = context.getConfiguration();
 
-      String hostname = job.get("warc.export.hostname", "localhost");
-      String publisher = job.get("warc.export.publisher", null);
-      String operator = job.get("warc.export.operator", null);
-      String software = job.get("warc.export.software", null);
-      String isPartOf = job.get("warc.export.isPartOf", null);
-      String description = job.get("warc.export.description", null);
-      boolean generateText = job.getBoolean("warc.export.text", true);
+      String prefix = conf.get("warc.export.prefix", "CC-CRAWL");
+      String textPrefix = conf.get("warc.export.textprefix", "CC-CRAWL-TEXT");
+      String prefixDate = conf.get("warc.export.date", fileDate.format(new Date()));
+
+      String hostname = conf.get("warc.export.hostname", "localhost");
+      String publisher = conf.get("warc.export.publisher", null);
+      String operator = conf.get("warc.export.operator", null);
+      String software = conf.get("warc.export.software", null);
+      String isPartOf = conf.get("warc.export.isPartOf", null);
+      String description = conf.get("warc.export.description", null);
+      boolean generateText = conf.getBoolean("warc.export.text", true);
 
 
       // WARC recommends - Prefix-Timestamp-Serial-Crawlhost.warc.gz
@@ -348,58 +342,61 @@ public class WarcExport extends Configured implements Tool {
       String textFilename = textPrefix + "-" + prefixDate + "-" + numberFormat.format(partition) + "-" +
           hostname + ".warc.gz";
 
-      return new WarcRecordWriter(fs, job, progress, filename, textFilename, hostname, publisher, operator, software,
+
+      Path outputPath = getOutputPath(context);
+
+      return new WarcRecordWriter(context, outputPath, filename, textFilename, hostname, publisher, operator, software,
           isPartOf, description, generateText);
     }
 
     @Override
-    public void checkOutputSpecs(FileSystem ignored, JobConf job)
-        throws IOException {
+    public synchronized OutputCommitter getOutputCommitter(TaskAttemptContext context) throws java.io.IOException {
+      if (committer == null) {
+        Path output = getOutputPath(context);
+
+        if (output.getFileSystem(context.getConfiguration()) instanceof NativeS3FileSystem ||
+            output.getFileSystem(context.getConfiguration()).getScheme().equals("s3a")) {
+          committer = new NullOutputCommitter();
+        } else {
+          committer = super.getOutputCommitter(context);
+        }
+      }
+      return committer;
+    }
+
+    @Override
+    public void checkOutputSpecs(JobContext job) throws FileAlreadyExistsException, IOException {
       // Ensure that the output directory is set and not already there
       Path outDir = getOutputPath(job);
-      if (outDir == null && job.getNumReduceTasks() != 0) {
-        throw new InvalidJobConfException("Output directory not set in JobConf.");
+      if (outDir == null) {
+        throw new InvalidJobConfException("Output directory not set.");
       }
-      if (outDir != null) {
-        FileSystem fs = outDir.getFileSystem(job);
-        // normalize the output directory
-        outDir = fs.makeQualified(outDir);
-        setOutputPath(job, outDir);
 
-        // get delegation token for the outDir's file system
-        TokenCache.obtainTokensForNamenodes(job.getCredentials(),
-            new Path[]{outDir}, job);
-
-      }
+      // get delegation token for outDir's file system
+      TokenCache.obtainTokensForNamenodes(job.getCredentials(),
+          new Path[] { outDir }, job.getConfiguration());
     }
   }
 
-  public static class ExportMapReduce extends Configured
-      implements Mapper<Text, Writable, Text, NutchWritable>,
-      Reducer<Text, NutchWritable, Text, CompleteData> {
-
-    public void configure(JobConf job) {
-      setConf(job);
-    }
-
-    public void map(Text key, Writable value,
-                    OutputCollector<Text, NutchWritable> output, Reporter reporter) throws IOException {
+  public static class ExportMap extends Mapper<Text, Writable, Text, NutchWritable> {
+    public void map(Text key, Writable value, Context context) throws IOException, InterruptedException {
       if (key.getLength() == 0) {
         return;
       }
 
-      output.collect(key, new NutchWritable(value));
+      context.write(key, new NutchWritable(value));
     }
+  }
 
-    public void reduce(Text key, Iterator<NutchWritable> values,
-                       OutputCollector<Text, CompleteData> output, Reporter reporter)
-        throws IOException {
+
+  public static class ExportReduce extends Reducer<Text, NutchWritable, Text, CompleteData> {
+    public void reduce(Text key, Iterable<NutchWritable> values, Context context) throws IOException, InterruptedException {
       CrawlDatum datum = null;
       Content content = null;
       ParseText parseText = null;
 
-      while (values.hasNext()) {
-        final Writable value = values.next().get(); // unwrap
+      for (NutchWritable nutchValue : values) {
+        final Writable value = nutchValue.get(); // unwrap
         if (value instanceof CrawlDatum) {
           datum = (CrawlDatum)value;
         } else if (value instanceof ParseData) {
@@ -428,11 +425,8 @@ public class WarcExport extends Configured implements Tool {
 
       CompleteData completeData = new CompleteData(key, datum, content, parseText);
 
-      output.collect(key, completeData);
-
+      context.write(key, completeData);
     }
-
-    public void close() throws IOException { }
   }
 
   public static class ParseDataCombinedInputFormat extends CombineSequenceFileInputFormat<Text, ParseData> {
@@ -469,8 +463,19 @@ public class WarcExport extends Configured implements Tool {
   public void export(Path outputDir, List<Path> segments,
                      boolean generateText) throws IOException {
 
-    final JobConf job = new NutchJob(getConf());
+    Configuration conf = getConf();
+    // We compress ourselves, so this isn't necessary
+    conf.setBoolean(org.apache.hadoop.mapreduce.lib.output.FileOutputFormat.COMPRESS, false);
+    conf.set("warc.export.hostname", getHostname());
+
+    conf.setBoolean("warc.export.text", generateText);
+
+
+    Job job = Job.getInstance(conf);
     job.setJobName("WarcExport: " + outputDir.toString());
+    job.setJarByClass(WarcExport.class);
+
+    FileOutputFormat.setOutputPath(job, new Path("out"));
 
     LOG.info("Exporter: Text generation: " + generateText);
 
@@ -497,44 +502,27 @@ public class WarcExport extends Configured implements Tool {
       MultipleInputs.addInputPath(job, new Path(segment, Content.DIR_NAME), ContentCombinedInputFormat.class);
     }
 
-    job.setMapperClass(ExportMapReduce.class);
-    job.setReducerClass(ExportMapReduce.class);
+    job.setMapperClass(ExportMap.class);
+    job.setReducerClass(ExportReduce.class);
 
-    job.setOutputFormat(WarcOutputFormat.class);
+
     job.setMapOutputValueClass(NutchWritable.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(CompleteData.class);
 
-    // We compress ourselves, so this isn't necessary
-    job.setBoolean(org.apache.hadoop.mapreduce.lib.output.FileOutputFormat.COMPRESS, false);
-    job.set("warc.export.hostname", getHostname());
+    job.setOutputFormatClass(WarcOutputFormat.class);
+    WarcOutputFormat.setOutputPath(job, outputDir);
 
-    job.setBoolean("warc.export.text", generateText);
 
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     long start = System.currentTimeMillis();
     LOG.info("Exporter: starting at " + sdf.format(start));
 
-    // S3 driver does an MD5 verification after uploading
-    // Also, this is painfully slow because of S3's slow copy functions
-
-    if (outputDir.getFileSystem(getConf()) instanceof NativeS3FileSystem ||
-        outputDir.getFileSystem(getConf()).getScheme().equals("s3a")) {
-      job.setOutputCommitter(NullOutputCommitter.class);
-    }
-
-    // job.setBoolean(ExportMapReduce.URL_FILTERING, filter);
-    // job.setBoolean(ExportMapReduce.URL_NORMALIZING, normalize);
-    job.setReduceSpeculativeExecution(false);
-    FileOutputFormat.setOutputPath(job, outputDir);
-
     try {
-      JobClient.runJob(job);
-      long end = System.currentTimeMillis();
-      LOG.info("Exporter: finished at " + sdf.format(end) + ", elapsed: "
-          + TimingUtil.elapsedTime(start, end));
-    } finally {
-      //FileSystem.get(job).delete(outputDir, true);
+      boolean result = job.waitForCompletion(true);
+      LOG.info("Return from waitForCompletion: " + result);
+    } catch (Exception e) {
+      LOG.error("Caught exception while trying to run job", e);
     }
   }
 
