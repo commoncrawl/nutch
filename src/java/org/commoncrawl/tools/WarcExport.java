@@ -378,24 +378,17 @@ public class WarcExport extends Configured implements Tool {
       implements Mapper<Text, Writable, Text, NutchWritable>,
       Reducer<Text, NutchWritable, Text, CompleteData> {
 
-    private NutchWritable tempWritable;
-
     public void configure(JobConf job) {
       setConf(job);
-      tempWritable = new NutchWritable();
     }
 
     public void map(Text key, Writable value,
                     OutputCollector<Text, NutchWritable> output, Reporter reporter) throws IOException {
-      String urlString = key.toString();
-      if (urlString == null) {
+      if (key.getLength() == 0) {
         return;
-      } else {
-        key.set(urlString);
       }
 
-      tempWritable.set(value);
-      output.collect(key, tempWritable);
+      output.collect(key, new NutchWritable(value));
     }
 
     public void reduce(Text key, Iterator<NutchWritable> values,
