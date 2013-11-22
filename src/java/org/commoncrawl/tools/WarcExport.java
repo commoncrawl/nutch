@@ -20,6 +20,7 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.TaskID;
+import org.apache.hadoop.mapred.lib.CombineFileInputFormat;
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.StringUtils;
@@ -38,6 +39,7 @@ import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
 import org.apache.nutch.util.TimingUtil;
 import org.apache.hadoop.mapred.TaskAttemptID;
+import org.commoncrawl.util.CombineSequenceFileInputFormat;
 import org.commoncrawl.warc.WarcWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -510,8 +512,10 @@ public class WarcExport extends Configured implements Tool {
       FileInputFormat.addInputPath(job, new Path(segment, Content.DIR_NAME));
     }
 
+
     //FileInputFormat.addInputPath(job, new Path(crawlDb, CrawlDb.CURRENT_NAME));
     job.setInputFormat(SequenceFileInputFormat.class);
+    job.setInputFormat(CombineSequenceFileInputFormat.class);
 
     job.setMapperClass(ExportMapReduce.class);
     job.setReducerClass(ExportMapReduce.class);
