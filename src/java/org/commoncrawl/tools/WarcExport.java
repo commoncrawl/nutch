@@ -26,7 +26,6 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.crawl.CrawlDatum;
-import org.apache.nutch.crawl.NutchWritable;
 import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.parse.ParseData;
 import org.apache.nutch.parse.ParseText;
@@ -35,6 +34,7 @@ import org.apache.nutch.protocol.ProtocolStatus;
 import org.apache.nutch.util.HadoopFSUtil;
 import org.apache.nutch.util.NutchConfiguration;
 import org.commoncrawl.util.CombineSequenceFileInputFormat;
+import org.commoncrawl.util.CompressedNutchWritable;
 import org.commoncrawl.util.NullOutputCommitter;
 import org.commoncrawl.warc.WarcWriter;
 import org.slf4j.Logger;
@@ -377,24 +377,24 @@ public class WarcExport extends Configured implements Tool {
     }
   }
 
-  public static class ExportMap extends Mapper<Text, Writable, Text, NutchWritable> {
+  public static class ExportMap extends Mapper<Text, Writable, Text, CompressedNutchWritable> {
     public void map(Text key, Writable value, Context context) throws IOException, InterruptedException {
       if (key.getLength() == 0) {
         return;
       }
 
-      context.write(key, new NutchWritable(value));
+      context.write(key, new CompressedNutchWritable(value));
     }
   }
 
 
-  public static class ExportReduce extends Reducer<Text, NutchWritable, Text, CompleteData> {
-    public void reduce(Text key, Iterable<NutchWritable> values, Context context) throws IOException, InterruptedException {
+  public static class ExportReduce extends Reducer<Text, CompressedNutchWritable, Text, CompleteData> {
+    public void reduce(Text key, Iterable<CompressedNutchWritable> values, Context context) throws IOException, InterruptedException {
       CrawlDatum datum = null;
       Content content = null;
       ParseText parseText = null;
 
-      for (NutchWritable nutchValue : values) {
+      for (CompressedNutchWritable nutchValue : values) {
         final Writable value = nutchValue.get(); // unwrap
         if (value instanceof CrawlDatum) {
           datum = (CrawlDatum)value;
@@ -505,7 +505,7 @@ public class WarcExport extends Configured implements Tool {
     job.setReducerClass(ExportReduce.class);
 
 
-    job.setMapOutputValueClass(NutchWritable.class);
+    job.setMapOutputValueClass(CompressedNutchWritable.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(CompleteData.class);
 

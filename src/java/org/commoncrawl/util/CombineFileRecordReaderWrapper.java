@@ -64,6 +64,7 @@ public abstract class CombineFileRecordReaderWrapper<K,V>
         split.getLength(idx),
         split.getLocations());
 
+    context.setStatus(fileSplit.toString());
     LOG.info("Opening FileSplit: " + fileSplit.toString());
     delegate = inputFormat.createRecordReader(fileSplit, context);
   }
