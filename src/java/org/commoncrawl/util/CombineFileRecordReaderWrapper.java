@@ -41,6 +41,8 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A wrapper class for a record reader that handles a single file split. It
@@ -60,6 +62,7 @@ import org.apache.hadoop.mapred.Reporter;
 @InterfaceStability.Stable
 public abstract class CombineFileRecordReaderWrapper<K,V>
     implements RecordReader<K,V> {
+  public static Logger LOG = LoggerFactory.getLogger(CombineFileRecordReaderWrapper.class);
   private final RecordReader<K,V> delegate;
 
   protected CombineFileRecordReaderWrapper(FileInputFormat<K,V> inputFormat,
@@ -70,6 +73,8 @@ public abstract class CombineFileRecordReaderWrapper<K,V>
         split.getLength(idx),
         split.getLocations());
 
+
+    LOG.info("Opening FileSplit: " + fileSplit.toString());
     delegate = inputFormat.getRecordReader(fileSplit, (JobConf)conf, reporter);
   }
 

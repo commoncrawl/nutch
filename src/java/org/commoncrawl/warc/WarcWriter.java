@@ -125,33 +125,21 @@ public class WarcWriter {
     return recordId;
   }
 
-  /**
-   *
-   * @param targetUri      url we fetched
-   * @param ip             ip we fetched from
-   * @param date           when we fetched
-   * @param warcinfoId     id for the warcinfo
-   * @param content        content of request
-   * @param contentLength  length of content
-   * @return               record id for this entry
-   * @throws IOException
-   */
   public URI writeWarcRequestRecord(final URI targetUri, final String ip, final Date date,
-                                     final URI warcinfoId, final InputStream content,
-                                     final long contentLength) throws IOException {
+                                    final URI warcinfoId, final byte[] content) throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
     extra.put(WARC_IP_ADDRESS, ip);
     extra.put(WARC_TARGET_URI, targetUri.toString());
 
     URI recordId = getRecordId();
-    writeRecord(WARC_REQUEST, date, "application/http; msgtype=request", recordId, extra, content, contentLength);
+    writeRecord(WARC_REQUEST, date, "application/http; msgtype=request", recordId, extra, content);
     return recordId;
   }
 
   public URI writeWarcResponseRecord(final URI targetUri, final String ip, final Date date,
-                                    final URI warcinfoId, final URI relatedId, final String payloadDigest,
-                                    final String blockDigest, final InputStream content, final long contentLength) throws IOException {
+                                     final URI warcinfoId, final URI relatedId, final String payloadDigest,
+                                     final String blockDigest, final byte[] content) throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
     extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
@@ -167,7 +155,7 @@ public class WarcWriter {
     }
 
     URI recordId = getRecordId();
-    writeRecord(WARC_RESPONSE, date, "application/http; msgtype=response", recordId, extra, content, contentLength);
+    writeRecord(WARC_RESPONSE, date, "application/http; msgtype=response", recordId, extra, content);
     return recordId;
   }
 
@@ -191,11 +179,10 @@ public class WarcWriter {
     return recordId;
   }
 
-
   public URI writeWarcMetadataRecord(final URI targetUri, final Date date,
-                                    final URI warcinfoId, final URI relatedId,
-                                    final String blockDigest,
-                                    final InputStream content, final long contentLength) throws IOException {
+                                     final URI warcinfoId, final URI relatedId,
+                                     final String blockDigest,
+                                     final byte[] content) throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
     extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
@@ -206,14 +193,14 @@ public class WarcWriter {
     }
 
     URI recordId = getRecordId();
-    writeRecord(WARC_METADATA, date, "application/warc-fields", recordId, extra, content, contentLength);
+    writeRecord(WARC_METADATA, date, "application/warc-fields", recordId, extra, content);
     return recordId;
   }
 
   public URI writeWarcConversionRecord(final URI targetUri, final Date date,
-                                     final URI warcinfoId, final URI relatedId,
-                                     final String blockDigest, final String contentType,
-                                     final InputStream content, final long contentLength) throws IOException {
+                                       final URI warcinfoId, final URI relatedId,
+                                       final String blockDigest, final String contentType,
+                                       final byte[] content) throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
     extra.put(WARC_REFERS_TO, "<" + relatedId.toString() + ">");
@@ -224,7 +211,7 @@ public class WarcWriter {
     }
 
     URI recordId = getRecordId();
-    writeRecord(WARC_CONVERSION, date, contentType, recordId, extra, content, contentLength);
+    writeRecord(WARC_CONVERSION, date, contentType, recordId, extra, content);
     return recordId;
   }
 
@@ -252,6 +239,37 @@ public class WarcWriter {
     out.write(sb.toString().getBytes("UTF-8"));
     if (contentLength != 0 && content != null) {
       copyStream(content, out, contentLength);
+    }
+
+    out.write(CRLF.getBytes());
+    out.write(CRLF.getBytes());
+    endRecord();
+  }
+
+
+  protected void writeRecord(final String type, final Date date, final String contentType,
+                             final URI recordId, Map<String, String> extra,
+                             final byte[] content) throws IOException {
+    StringBuilder sb = new StringBuilder(4096);
+
+    sb.append(WARC_VERSION).append(CRLF);
+
+    Map<String, String> header = new LinkedHashMap<String, String>();
+    header.put(WARC_TYPE, type);
+    header.put(WARC_DATE, isoDate.format(date));
+    header.put(WARC_RECORD_ID, "<" + recordId.toString() + ">");
+    header.put(CONTENT_LENGTH, Long.toString(content.length));
+    header.put(CONTENT_TYPE, contentType);
+
+    writeWarcKeyValue(sb, header);
+    writeWarcKeyValue(sb, extra);
+
+    sb.append(CRLF);
+
+    startRecord();
+    out.write(sb.toString().getBytes("UTF-8"));
+    if (content != null && content.length != 0) {
+      out.write(content);
     }
 
     out.write(CRLF.getBytes());

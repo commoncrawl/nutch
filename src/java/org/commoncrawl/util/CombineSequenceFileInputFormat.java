@@ -19,10 +19,15 @@ package org.commoncrawl.util;
  */
 
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.MapFile;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
@@ -31,6 +36,7 @@ import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.lib.CombineFileInputFormat;
 import org.apache.hadoop.mapred.lib.CombineFileRecordReader;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
+import org.apache.hadoop.mapreduce.JobContext;
 
 /**
  * Input format that is a <code>CombineFileInputFormat</code>-equivalent for
@@ -65,5 +71,37 @@ public class CombineSequenceFileInputFormat<K,V>
                                            Configuration conf, Reporter reporter, Integer idx) throws IOException {
       super(new SequenceFileInputFormat<K,V>(), split, conf, reporter, idx);
     }
+  }
+
+  @Override
+  protected List<FileStatus> listStatus(JobContext job)throws IOException {
+    List<FileStatus> files = super.listStatus(job);
+    int len = files.size();
+    for(int i=0; i < len; ++i) {
+      FileStatus file = files.get(i);
+      if (file.isDirectory()) {     // it's a MapFile
+        Path p = file.getPath();
+        FileSystem fs = p.getFileSystem(job.getConfiguration());
+        // use the data file
+        files.set(i, fs.getFileStatus(new Path(p, MapFile.DATA_FILE_NAME)));
+      }
+    }
+    return files;
+  }
+
+
+  @Override
+  protected FileStatus[] listStatus(JobConf job) throws IOException {
+    FileStatus[] files = super.listStatus(job);
+    for (int i = 0; i < files.length; i++) {
+      FileStatus file = files[i];
+      if (file.isDirectory()) {     // it's a MapFile
+        Path dataFile = new Path(file.getPath(), MapFile.DATA_FILE_NAME);
+        FileSystem fs = file.getPath().getFileSystem(job);
+        // use the data file
+        files[i] = fs.getFileStatus(dataFile);
+      }
+    }
+    return files;
   }
 }

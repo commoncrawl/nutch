@@ -8,7 +8,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.InvalidJobConfException;
 import org.apache.hadoop.mapred.JobClient;
@@ -18,9 +17,8 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.TaskID;
-import org.apache.hadoop.mapred.lib.CombineFileInputFormat;
+import org.apache.hadoop.mapred.lib.MultipleInputs;
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.StringUtils;
@@ -45,12 +43,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -247,18 +243,10 @@ public class WarcExport extends Configured implements Tool {
           headers = verbatimResponseHeaders;
         }
 
-        StringBuilder requestsb = new StringBuilder(4096);
-        requestsb.append(verbatimRequestHeaders);
-
-        byte[] requestBytes = requestsb.toString().getBytes("utf-8");
-        InputStream request = new ByteArrayInputStream(requestBytes);
-
-        URI requestId = warcWriter.writeWarcRequestRecord(targetUri, ip, date, warcinfoId, request, requestBytes.length);
+        URI requestId = warcWriter.writeWarcRequestRecord(targetUri, ip, date, warcinfoId,
+            verbatimRequestHeaders.getBytes("utf-8"));
 
         if (notModified) {
-          InputStream abbreviatedResponse;
-          int abbreviatedResponseLength;
-
           /*
           warcWriter.writeWarcRevisitRecord(targetUri, ip, date, warcinfoId, requestId,
               WarcWriter.PROFILE_REVISIT_NOT_MODIFIED, payloadDigest, abbreviatedResponse, abbreviatedResponseLength);
@@ -274,11 +262,9 @@ public class WarcExport extends Configured implements Tool {
           System.arraycopy(value.content.getContent(), 0, responseBytes, responseHeaderBytes.length,
               value.content.getContent().length);
 
-          InputStream response = new ByteArrayInputStream(responseBytes);
-
           URI responseId = warcWriter.writeWarcResponseRecord(targetUri, ip, date, warcinfoId, requestId,
-              getSha1DigestWithAlg(value.content.getContent()), getSha1DigestWithAlg(responseBytes), response,
-              responseBytes.length);
+              getSha1DigestWithAlg(value.content.getContent()), getSha1DigestWithAlg(responseBytes), responseBytes);
+
 
           // Write metadata record
           StringBuilder metadatasb = new StringBuilder(4096);
@@ -297,11 +283,8 @@ public class WarcExport extends Configured implements Tool {
           }
           metadatasb.append(CRLF);
 
-          byte[] metadataBytes = metadatasb.toString().getBytes("utf-8");
-          InputStream metadataStream = new ByteArrayInputStream(metadataBytes);
-
-          warcWriter.writeWarcMetadataRecord(targetUri, date, warcinfoId, responseId, null, metadataStream,
-              metadataBytes.length);
+          warcWriter.writeWarcMetadataRecord(targetUri, date, warcinfoId, responseId, null,
+              metadatasb.toString().getBytes("utf-8"));
 
           // Write text extract
           if (generateText && value.parseText != null) {
@@ -309,10 +292,8 @@ public class WarcExport extends Configured implements Tool {
             if (text != null) {
               byte[] conversionBytes = value.parseText.getText().getBytes("utf-8");
               if (conversionBytes.length != 0) {
-                InputStream conversion = new ByteArrayInputStream(conversionBytes);
-
                 textWarcWriter.writeWarcConversionRecord(targetUri, date, textWarcinfoId, responseId,
-                    getSha1DigestWithAlg(conversionBytes),"text/plain", conversion, conversionBytes.length);
+                    getSha1DigestWithAlg(conversionBytes), "text/plain", conversionBytes);
               }
             }
           }
@@ -406,7 +387,6 @@ public class WarcExport extends Configured implements Tool {
 
     public void map(Text key, Writable value,
                     OutputCollector<Text, NutchWritable> output, Reporter reporter) throws IOException {
-
       String urlString = key.toString();
       if (urlString == null) {
         return;
@@ -462,6 +442,18 @@ public class WarcExport extends Configured implements Tool {
     public void close() throws IOException { }
   }
 
+  public static class ParseDataCombinedInputFormat extends CombineSequenceFileInputFormat<Text, ParseData> {
+  }
+
+  public static class ParseTextCombinedInputFormat extends CombineSequenceFileInputFormat<Text, ParseText> {
+  }
+
+  public static class CrawlDatumCombinedInputFormat extends CombineSequenceFileInputFormat<Text, CrawlDatum> {
+  }
+
+  public static class ContentCombinedInputFormat extends CombineSequenceFileInputFormat<Text, Content> {
+  }
+
   public String getHostname() {
     try {
       Process p = Runtime.getRuntime().exec("hostname -f");
@@ -493,29 +485,24 @@ public class WarcExport extends Configured implements Tool {
       LOG.info("ExporterMapReduces: adding segment: " + segment);
       FileSystem fs = segment.getFileSystem(getConf());
 
-      FileInputFormat.addInputPath(job, new Path(segment, CrawlDatum.FETCH_DIR_NAME));
+      MultipleInputs.addInputPath(job, new Path(segment, CrawlDatum.FETCH_DIR_NAME), CrawlDatumCombinedInputFormat.class);
 
       Path parseDataPath = new Path(segment, ParseData.DIR_NAME);
       if (fs.exists(parseDataPath)) {
-        FileInputFormat.addInputPath(job, parseDataPath);
+        MultipleInputs.addInputPath(job, parseDataPath, ParseDataCombinedInputFormat.class);
       }
 
       Path parseTextPath = new Path(segment, ParseText.DIR_NAME);
       if (generateText) {
         if (fs.exists(parseTextPath)) {
-          FileInputFormat.addInputPath(job, parseTextPath);
+          MultipleInputs.addInputPath(job, parseTextPath, ParseTextCombinedInputFormat.class);
         } else {
           LOG.warn("ParseText path doesn't exist: " + parseTextPath.toString());
         }
       }
 
-      FileInputFormat.addInputPath(job, new Path(segment, Content.DIR_NAME));
+      MultipleInputs.addInputPath(job, new Path(segment, Content.DIR_NAME), ContentCombinedInputFormat.class);
     }
-
-
-    //FileInputFormat.addInputPath(job, new Path(crawlDb, CrawlDb.CURRENT_NAME));
-    job.setInputFormat(SequenceFileInputFormat.class);
-    job.setInputFormat(CombineSequenceFileInputFormat.class);
 
     job.setMapperClass(ExportMapReduce.class);
     job.setReducerClass(ExportMapReduce.class);
