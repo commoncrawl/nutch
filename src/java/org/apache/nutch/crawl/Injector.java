@@ -106,6 +106,11 @@ public class Injector extends Configured implements Tool {
     		  // find separation between name and value
     		  int indexEquals = splits[s].indexOf("=");
     		  if (indexEquals==-1) {
+            // skip over this - blekko redir records
+            if (splits[s].equals("redir")) {
+              url = null;
+              break;
+            }
     			  // skip anything without a =
     			  continue;		    
     		  }
