@@ -100,8 +100,13 @@ public class Injector extends Configured implements Tool {
       int fixedInterval = -1;
       Map<String,String> metadata = new TreeMap<String,String>();
       if (url.contains("\t") || url.contains(" ")){
-    	  String[] splits = url.split("[\t|\\s]");
-    	  url = splits[0];
+        String[] splits;
+        try {
+    	    splits = url.split("[\t|\\s]");
+    	    url = splits[0];
+        } catch (Exception e)  {
+          LOG.error("Couldn't get split right? '" + value.toString() + "'", e);
+        }
     	  for (int s=1;s<splits.length;s++){
     		  // find separation between name and value
     		  int indexEquals = splits[s].indexOf("=");
