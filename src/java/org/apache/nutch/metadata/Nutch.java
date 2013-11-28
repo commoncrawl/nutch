@@ -95,4 +95,7 @@ public interface Nutch {
 
   // Raw status code we fetched
   public static final String FETCH_RESPONSE_STATUS_CODE_KEY = "cc.response.status.code";
+
+  // Response truncated?
+  public static final String FETCH_RESPONSE_TRUNCATED_KEY = "cc.response.truncated";
 }

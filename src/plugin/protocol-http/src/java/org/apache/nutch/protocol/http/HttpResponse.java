@@ -265,8 +265,10 @@ public class HttpResponse implements Response {
       }
     }
     if (http.getMaxContent() >= 0
-      && contentLength > http.getMaxContent())   // limit download size
+      && contentLength > http.getMaxContent()) {  // limit download size
       contentLength  = http.getMaxContent();
+      headers.set(Nutch.FETCH_RESPONSE_TRUNCATED_KEY, "1");
+    }
 
     ByteArrayOutputStream out = new ByteArrayOutputStream(Http.BUFFER_SIZE);
     byte[] bytes = new byte[Http.BUFFER_SIZE];
@@ -287,6 +289,9 @@ public class HttpResponse implements Response {
         throw new SocketTimeoutException("Fetch duration exceeded: " + fetchDuration + " > " + http.getMaxFetchDuration());
       }
 
+    }
+    if (length < contentLength) {
+      headers.set(Nutch.FETCH_RESPONSE_TRUNCATED_KEY, "1");
     }
     content = out.toByteArray();
   }

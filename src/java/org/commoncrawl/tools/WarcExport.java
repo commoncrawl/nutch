@@ -212,6 +212,7 @@ public class WarcExport extends Configured implements Tool {
           } else if (name.equals(Nutch.CRAWL_DELAY_KEY)) {
             crawlDelay = value.content.getMetadata().get(name);
           } else if (name.equals(Nutch.SIGNATURE_KEY)) {
+          } else if (name.equals(Nutch.FETCH_RESPONSE_TRUNCATED_KEY)) {
           } else if (name.equals(Nutch.FETCH_RESPONSE_VERBATIM_HEADERS_KEY)) {
             verbatimResponseHeaders = value.content.getMetadata().get(name);
             if (verbatimResponseHeaders.contains(CRLF)) {
