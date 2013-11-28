@@ -99,7 +99,7 @@ public class Injector extends Configured implements Tool {
       int customInterval = interval;
       int fixedInterval = -1;
       Map<String,String> metadata = new TreeMap<String,String>();
-      if (url.indexOf("\t")!=-1 || url.indexOf(" ")!=-1){
+      if (url.contains("\t") || url.contains(" ")){
     	  String[] splits = url.split("[\t|\\s]");
     	  url = splits[0];
     	  for (int s=1;s<splits.length;s++){
@@ -108,8 +108,8 @@ public class Injector extends Configured implements Tool {
     		  if (indexEquals==-1) {
             // skip over this - blekko redir records
             if (splits[s].equals("redir")) {
-              url = null;
-              break;
+              reporter.getCounter("injector", "urls_filtered").increment(1);
+              return;
             }
     			  // skip anything without a =
     			  continue;		    
