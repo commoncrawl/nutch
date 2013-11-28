@@ -62,6 +62,11 @@ import java.util.TimeZone;
 public class WarcExport extends Configured implements Tool {
   public static Logger LOG = LoggerFactory.getLogger(WarcExport.class);
 
+  static {
+    Configuration.addDefaultResource("nutch-default.xml");
+    Configuration.addDefaultResource("nutch-site.xml");
+  }
+
   public static class CompleteData implements Writable {
     public Text url;
     public CrawlDatum datum;
@@ -461,8 +466,8 @@ public class WarcExport extends Configured implements Tool {
 
   public void export(Path outputDir, List<Path> segments,
                      boolean generateText) throws IOException {
-
     Configuration conf = getConf();
+
     // We compress ourselves, so this isn't necessary
     conf.setBoolean(org.apache.hadoop.mapreduce.lib.output.FileOutputFormat.COMPRESS, false);
     conf.set("warc.export.hostname", getHostname());
