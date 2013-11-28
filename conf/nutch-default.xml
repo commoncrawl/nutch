@@ -255,6 +255,22 @@
   </description>
 </property>
 
+<property>
+  <name>http.throughput.threshold.bytes</name>
+  <value>-1</value>
+  <description>The minimum throughput in bytes per second for an HTTP 
+  connection before erroring out.
+  </description>
+</property>
+
+<property>
+  <name>http.fetch.duration</name>
+  <value>-1</value>
+  <description>The maximum amount of time in seconds to fetch from a 
+  single resource before erroring out.
+  </description>
+</property>
+
 <!-- FTP properties -->
 
 <property>

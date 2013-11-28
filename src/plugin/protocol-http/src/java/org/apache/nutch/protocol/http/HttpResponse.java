@@ -26,6 +26,7 @@ import java.io.OutputStream;
 import java.io.PushbackInputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 
 // Nutch imports
@@ -44,6 +45,7 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.SSLSocket;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.Date;
 
 
 /** An HTTP response. */
@@ -58,6 +60,10 @@ public class HttpResponse implements Response {
   private Metadata headers = new SpellCheckedMetadata();
   private StringBuffer verbatimResponseHeaders = new StringBuffer();
   private final String CRLF = "\r\n";
+  private int throughputData[] = new int[60];
+  private int throughputDataPos = -1;
+  protected long fetchStarted = -1;
+
 
   protected enum Scheme {
     HTTP,
@@ -71,6 +77,7 @@ public class HttpResponse implements Response {
     this.url = url;
     this.orig = url.toString();
     this.base = url.toString();
+    this.fetchStarted = new Date().getTime() / 1000;
     Scheme scheme = null;
 
     if ("http".equals(url.getProtocol())) {
@@ -265,14 +272,26 @@ public class HttpResponse implements Response {
     byte[] bytes = new byte[Http.BUFFER_SIZE];
     int length = 0;                           // read content
     for (int i = in.read(bytes); i != -1 && length + i <= contentLength; i = in.read(bytes)) {
-
       out.write(bytes, 0, i);
       length += i;
+
+      if (updateReadMovingAverage(i)) {
+        if (getReadMovingAverage() < http.getMinThroughput()) {
+          throw new SocketTimeoutException("Bandwidth lower threshold reached: " + getReadMovingAverage() +
+              " < " + http.getMinThroughput());
+        }
+      }
+
+      long fetchDuration = new Date().getTime() / 1000 - fetchStarted;
+      if (http.getMaxFetchDuration() > 0 && fetchDuration > http.getMaxFetchDuration()) {
+        throw new SocketTimeoutException("Fetch duration exceeded: " + fetchDuration + " > " + http.getMaxFetchDuration());
+      }
+
     }
     content = out.toByteArray();
   }
 
-  private void readChunkedContent(PushbackInputStream in,  
+  private void readChunkedContent(PushbackInputStream in,
                                   StringBuffer line) 
     throws HttpException, IOException {
     boolean doneChunks= false;
@@ -476,4 +495,55 @@ public class HttpResponse implements Response {
     return value;
   }
 
+  // Note: this will not deal with 60 second pauses well, but then the socket should time out so that doesn't happen
+  public boolean updateReadMovingAverage(final int bytes) {
+    final long now = new Date().getTime() / 1000;
+    final int periods = throughputData.length;
+    int pos = (int)(now % periods);
+
+    if (throughputDataPos == -1) {
+      for (int i = 0; i < periods; i++) {
+        throughputData[i] = -1;
+      }
+
+      throughputData[pos] = bytes;
+    } else if (throughputDataPos == pos) {
+      throughputData[pos] += bytes;
+    } else {
+      throughputData[pos] = bytes;
+
+      for (int i = throughputDataPos+1; i < Math.min(periods, pos); i++) {
+        throughputData[i] = 0;
+      }
+
+      if (pos < throughputDataPos) {
+        for (int i = 0; i < pos; i++) {
+          throughputData[i] = 0;
+        }
+      }
+    }
+
+    boolean ret = throughputDataPos != pos;
+    throughputDataPos = pos;
+    return ret;
+  }
+
+  // We return Long.MAX_VALUE until we have at least half the samples (30 seconds) of data
+  public long getReadMovingAverage() {
+    final int periods = throughputData.length;
+    long sum = 0;
+    int numset = 0;
+    for (int i = 0; i < periods; i++) {
+      if (throughputData[i] != -1) {
+        numset++;
+        sum += throughputData[i];
+      }
+    }
+
+    if (numset < periods / 2) {
+      return Long.MAX_VALUE;
+    }
+
+    return sum / numset;
+  }
 }

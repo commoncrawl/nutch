@@ -66,6 +66,12 @@ public abstract class HttpBase implements Protocol {
   /** The network timeout in millisecond */
   protected int timeout = 10000;
 
+  /** The maximum number of seconds to fetch for */
+  protected int maxFetchDuration = -1;
+
+  /** The minimum 60-second average throughput to fetch at in bytes per second */
+  protected long minThroughput = -1;
+
   /** The length limit for downloaded content, in bytes. */
   protected int maxContent = 64 * 1024; 
 
@@ -123,6 +129,8 @@ public abstract class HttpBase implements Protocol {
       this.accept = conf.get("http.accept", accept);
       // backward-compatible default setting
       this.useHttp11 = conf.getBoolean("http.useHttp11", false);
+      this.minThroughput = conf.getLong("http.throughput.threshold.bytes", -1);
+      this.maxFetchDuration = conf.getInt("http.fetch.duration", -1);
       this.robots.setConf(conf);
       logConf();
   }
@@ -131,8 +139,14 @@ public abstract class HttpBase implements Protocol {
   public Configuration getConf() {
     return this.conf;
   }
-   
-  
+
+  public long getMinThroughput() {
+    return minThroughput;
+  }
+
+  public long getMaxFetchDuration() {
+    return maxFetchDuration;
+  }
   
   public ProtocolOutput getProtocolOutput(Text url, CrawlDatum datum) {
     
