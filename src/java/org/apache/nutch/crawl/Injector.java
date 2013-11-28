@@ -106,6 +106,8 @@ public class Injector extends Configured implements Tool {
     	    url = splits[0];
         } catch (Exception e)  {
           LOG.error("Couldn't get split right? '" + value.toString() + "'", e);
+          reporter.getCounter("injector", "urls_filtered").increment(1);
+          return;
         }
     	  for (int s=1;s<splits.length;s++){
     		  // find separation between name and value
