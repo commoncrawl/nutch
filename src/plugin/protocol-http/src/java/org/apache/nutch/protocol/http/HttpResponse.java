@@ -267,7 +267,7 @@ public class HttpResponse implements Response {
     if (http.getMaxContent() >= 0
       && contentLength > http.getMaxContent()) {  // limit download size
       contentLength  = http.getMaxContent();
-      headers.set(Nutch.FETCH_RESPONSE_TRUNCATED_KEY, "1");
+      headers.set(Nutch.FETCH_RESPONSE_TRUNCATED_KEY, "length");
     }
 
     ByteArrayOutputStream out = new ByteArrayOutputStream(Http.BUFFER_SIZE);
@@ -279,19 +279,25 @@ public class HttpResponse implements Response {
 
       if (updateReadMovingAverage(i)) {
         if (getReadMovingAverage() < http.getMinThroughput()) {
-          throw new SocketTimeoutException("Bandwidth lower threshold reached: " + getReadMovingAverage() +
+          headers.set(Nutch.FETCH_RESPONSE_TRUNCATED_KEY, "time");
+          Http.LOG.info("Bandwidth lower threshold reached: " + getReadMovingAverage() +
               " < " + http.getMinThroughput());
+          content = out.toByteArray();
+          return;
         }
       }
 
       long fetchDuration = new Date().getTime() / 1000 - fetchStarted;
       if (http.getMaxFetchDuration() > 0 && fetchDuration > http.getMaxFetchDuration()) {
-        throw new SocketTimeoutException("Fetch duration exceeded: " + fetchDuration + " > " + http.getMaxFetchDuration());
+        headers.set(Nutch.FETCH_RESPONSE_TRUNCATED_KEY, "time");
+        Http.LOG.info("Fetch duration exceeded: " + fetchDuration + " > " + http.getMaxFetchDuration());
+        content = out.toByteArray();
+        return;
       }
 
     }
     if (length < contentLength) {
-      headers.set(Nutch.FETCH_RESPONSE_TRUNCATED_KEY, "1");
+      headers.set(Nutch.FETCH_RESPONSE_TRUNCATED_KEY, "length");
     }
     content = out.toByteArray();
   }
