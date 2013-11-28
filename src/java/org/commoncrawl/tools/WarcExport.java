@@ -200,6 +200,7 @@ public class WarcExport extends Configured implements Tool {
         }
 
         boolean useVerbatimResponseHeaders = false;
+        String truncatedReason = null;
 
         for (String name : value.content.getMetadata().names()) {
           if (name.equals(Nutch.FETCH_DEST_IP_KEY)) {
@@ -213,6 +214,7 @@ public class WarcExport extends Configured implements Tool {
             crawlDelay = value.content.getMetadata().get(name);
           } else if (name.equals(Nutch.SIGNATURE_KEY)) {
           } else if (name.equals(Nutch.FETCH_RESPONSE_TRUNCATED_KEY)) {
+            truncatedReason = value.content.getMetadata().get(name);
           } else if (name.equals(Nutch.FETCH_RESPONSE_VERBATIM_HEADERS_KEY)) {
             verbatimResponseHeaders = value.content.getMetadata().get(name);
             if (verbatimResponseHeaders.contains(CRLF)) {
@@ -268,7 +270,8 @@ public class WarcExport extends Configured implements Tool {
               value.content.getContent().length);
 
           URI responseId = warcWriter.writeWarcResponseRecord(targetUri, ip, date, warcinfoId, requestId,
-              getSha1DigestWithAlg(value.content.getContent()), getSha1DigestWithAlg(responseBytes), responseBytes);
+              getSha1DigestWithAlg(value.content.getContent()), getSha1DigestWithAlg(responseBytes), truncatedReason,
+              responseBytes);
 
 
           // Write metadata record

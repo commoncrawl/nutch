@@ -42,6 +42,7 @@ public class WarcWriter {
   private final String WARC_REFERS_TO = "WARC-Refers-To";
   private final String WARC_BLOCK_DIGEST = "WARC-Block-Digest";
   private final String WARC_PAYLOAD_DIGEST = "WARC-Payload-Digest";
+  private final String WARC_TRUNCATED = "WARC-Truncated";
   private final String WARC_IDENTIFIED_PAYLOAD_TYPE = "WARC-Identified-Payload-Type";
   private final String WARC_PROFILE = "WARC-Profile";
   private final String WARC_FILENAME = "WARC-Filename";
@@ -139,7 +140,8 @@ public class WarcWriter {
 
   public URI writeWarcResponseRecord(final URI targetUri, final String ip, final Date date,
                                      final URI warcinfoId, final URI relatedId, final String payloadDigest,
-                                     final String blockDigest, final byte[] content) throws IOException {
+                                     final String blockDigest, final String truncated, final byte[] content)
+      throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
     extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
@@ -152,6 +154,10 @@ public class WarcWriter {
 
     if (blockDigest != null) {
       extra.put(WARC_BLOCK_DIGEST, blockDigest);
+    }
+
+    if (truncated != null) {
+      extra.put(WARC_TRUNCATED, truncated);
     }
 
     URI recordId = getRecordId();
