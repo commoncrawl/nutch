@@ -568,7 +568,7 @@ public class Generator2 extends Configured implements Tool {
    * @throws IOException
    *           When an I/O error occurs
    */
-  public Path[] generate(Path dbDir, Path segments, int numLists, long topN, long curTime, boolean filter,
+  public Path[] generate(Path dbDir, String dbVersion, Path segments, int numLists, long topN, long curTime, boolean filter,
                          boolean norm, boolean force, int maxNumSegments, boolean keep, String stage2)
       throws IOException {
 
@@ -616,7 +616,7 @@ public class Generator2 extends Configured implements Tool {
       job.setInt(GENERATOR_MAX_NUM_SEGMENTS, maxNumSegments);
       job.setInt("partition.url.seed", new Random().nextInt());
 
-      FileInputFormat.addInputPath(job, new Path(dbDir, CrawlDb.CURRENT_NAME));
+      FileInputFormat.addInputPath(job, new Path(dbDir, dbVersion));
       job.setInputFormat(SequenceFileInputFormat.class);
 
       job.setMapperClass(Selector.class);
@@ -791,6 +791,7 @@ public class Generator2 extends Configured implements Tool {
     boolean keep = false;
     int maxNumSegments = 1;
     String stage2 = null;
+    String dbVersion = CrawlDb.CURRENT_NAME;
 
 
     for (int i = 2; i < args.length; i++) {
@@ -816,12 +817,14 @@ public class Generator2 extends Configured implements Tool {
       } else if ("-stage2".equals(args[i])) {
         stage2 = args[i+1];
         i++;
+      } else if ("-dbVersion".equals(args[i])) {
+        dbVersion = args[i+1];
+        i++;
       }
-
     }
 
     try {
-      Path[] segs = generate(dbDir, segmentsDir, numFetchers, topN, curTime, filter,
+      Path[] segs = generate(dbDir, dbVersion, segmentsDir, numFetchers, topN, curTime, filter,
           norm, force, maxNumSegments, keep, stage2);
       if (segs == null) return -1;
     } catch (Exception e) {
