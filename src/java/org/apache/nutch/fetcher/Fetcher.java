@@ -1386,6 +1386,7 @@ public class Fetcher extends Configured implements Tool,
     // Also, this is painfully slow because of S3's slow copy functions
     if (segment.getFileSystem(getConf()) instanceof NativeS3FileSystem ||
         segment.getFileSystem(getConf()).getScheme().equals("s3a")) {
+      LOG.info("Fetcher: Setting null output committer for " + segment.getFileSystem(getConf()).getScheme());
       job.setOutputCommitter(NullOutputCommitter.class);
     }
 
