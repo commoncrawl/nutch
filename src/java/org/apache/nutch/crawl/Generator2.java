@@ -615,6 +615,17 @@ public class Generator2 extends Configured implements Tool {
       job.setBoolean(GENERATOR_NORMALISE, norm);
       job.setInt(GENERATOR_MAX_NUM_SEGMENTS, maxNumSegments);
       job.setInt("partition.url.seed", new Random().nextInt());
+      job.setSpeculativeExecution(true);
+      job.setReduceSpeculativeExecution(true);
+
+      // Historically it doesn't seem to have exceeded 1 GB for maps and 2 GB for reduce
+      job.setInt("mapreduce.map.memory.mb", 1536);
+      job.setInt("mapreduce.reduce.memory.mb", 3500);
+
+      job.setProfileEnabled(true);
+      job.setProfileParams("-agentlib:hprof=cpu=samples,interval=50,depth=6," +
+          "force=n,thread=y,verbose=n,file=%s");
+      job.setProfileTaskRange(true, "0-1");
 
       FileInputFormat.addInputPath(job, new Path(dbDir, dbVersion));
       job.setInputFormat(SequenceFileInputFormat.class);
@@ -646,6 +657,10 @@ public class Generator2 extends Configured implements Tool {
       job.setJobName("generate: segmenter");
       job.setInt(GENERATOR_MAX_NUM_SEGMENTS, maxNumSegments);
       job.setLong(GENERATOR_TOP_N, topN);
+
+      // Does't appear to go above 1 GB for a map
+      job.setInt("mapreduce.map.memory.mb", 1536);
+      job.setInt("mapreduce.reduce.memory.mb", 2048);
 
       FileInputFormat.addInputPath(job, stage1Dir);
       job.setInputFormat(SequenceFileInputFormat.class);
@@ -731,6 +746,10 @@ public class Generator2 extends Configured implements Tool {
     job.setMapOutputValueClass(SelectorEntry.class);
     job.setLong("mapred.min.split.size", Long.MAX_VALUE);
     job.setInt("num.lists", numLists);
+
+    // XX not tested
+    job.setInt("mapreduce.map.memory.mb", 2048);
+    job.setInt("mapreduce.reduce.memory.mb", 2048);
 
     job.setNumReduceTasks(0);
 
