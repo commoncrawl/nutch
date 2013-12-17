@@ -61,18 +61,18 @@ public class CrawlDb extends Configured implements Tool {
 
   public void update(Path crawlDb, Path[] segments, boolean normalize, boolean filter) throws IOException {
     boolean additionsAllowed = getConf().getBoolean(CRAWLDB_ADDITIONS_ALLOWED, true);
-    update(crawlDb, segments, normalize, filter, additionsAllowed, false, true, CrawlDb.CURRENT_NAME);
+    update(crawlDb, segments, normalize, filter, additionsAllowed, false, true, CrawlDb.CURRENT_NAME, crawlDb);
   }
   
   public void update(Path crawlDb, Path[] segments, boolean normalize, boolean filter, boolean additionsAllowed,
-                     boolean force, boolean install, String dbVersion) throws IOException {
-    FileSystem fs = crawlDb.getFileSystem(getConf());
-    Path lock = new Path(crawlDb, LOCK_NAME);
+                     boolean force, boolean install, String dbVersion, Path outputDir) throws IOException {
+    FileSystem fs = outputDir.getFileSystem(getConf());
+    Path lock = new Path(outputDir, LOCK_NAME);
     LockUtil.createLockFile(fs, lock, force);
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     long start = System.currentTimeMillis();
 
-    JobConf job = CrawlDb.createJob(getConf(), crawlDb, dbVersion);
+    JobConf job = CrawlDb.createJob(getConf(), crawlDb, dbVersion, outputDir);
     job.setBoolean(CRAWLDB_ADDITIONS_ALLOWED, additionsAllowed);
     job.setBoolean(CrawlDbFilter.URL_FILTERING, filter);
     job.setBoolean(CrawlDbFilter.URL_NORMALIZING, normalize);
@@ -123,10 +123,10 @@ public class CrawlDb extends Configured implements Tool {
     LOG.info("CrawlDb update: finished at " + sdf.format(end) + ", elapsed: " + TimingUtil.elapsedTime(start, end));
   }
 
-  public static JobConf createJob(Configuration config, Path crawlDb, String dbVersion)
+  public static JobConf createJob(Configuration config, Path crawlDb, String dbVersion, Path outputDir)
     throws IOException {
     Path newCrawlDb =
-      new Path(crawlDb,
+      new Path(outputDir,
                Integer.toString(new Random().nextInt(Integer.MAX_VALUE)));
 
     JobConf job = new NutchJob(config);
@@ -185,7 +185,7 @@ public class CrawlDb extends Configured implements Tool {
 
   public int run(String[] args) throws Exception {
     if (args.length < 1) {
-      System.err.println("Usage: CrawlDb <crawldb> (-dir <segments> | <seg1> <seg2> ...) [-force] [-normalize] [-filter] [-noAdditions] [-noInstall] [-dbversion ver]");
+      System.err.println("Usage: CrawlDb <crawldb> (-dir <segments> | <seg1> <seg2> ...) [-force] [-normalize] [-filter] [-noAdditions] [-noInstall] [-dbversion ver] [-output crawldb]");
       System.err.println("\tcrawldb\tCrawlDb to update");
       System.err.println("\t-dir segments\tparent directory containing all segments to update from");
       System.err.println("\tseg1 seg2 ...\tlist of segment names to update from");
@@ -195,6 +195,7 @@ public class CrawlDb extends Configured implements Tool {
       System.err.println("\t-noAdditions\tonly update already existing URLs, don't add any newly discovered URLs");
       System.err.println("\t-noInstall\tdon't rename output directory to current and previous to old");
       System.err.println("\t-dbVersion ver\tupdate using a specific crawldb/ver directory");
+      System.err.println("\t-crawldb crawldb\toutput to crawldb instead of input dir");
 
       return -1;
     }
@@ -205,6 +206,7 @@ public class CrawlDb extends Configured implements Tool {
     boolean install = true;
     boolean additionsAllowed = getConf().getBoolean(CRAWLDB_ADDITIONS_ALLOWED, true);
     String dbVersion = CURRENT_NAME;
+    Path outputDir = new Path(args[0]);
 
     HashSet<Path> dirs = new HashSet<Path>();
     for (int i = 1; i < args.length; i++) {
@@ -227,6 +229,8 @@ public class CrawlDb extends Configured implements Tool {
         }
       } else if ("-dbVersion".equals(args[i])) {
         dbVersion = args[++i];
+      } else if ("-output".equals(args[i])) {
+        outputDir = new Path(args[++i]);
       } else if (args[i].equals("-noInstall")) {
         install = false;
       } else {
@@ -235,7 +239,7 @@ public class CrawlDb extends Configured implements Tool {
     }
     try {
       update(new Path(args[0]), dirs.toArray(new Path[dirs.size()]), normalize, filter, additionsAllowed, force,
-          install, dbVersion);
+          install, dbVersion, outputDir);
       return 0;
     } catch (Exception e) {
       LOG.error("CrawlDb update: " + StringUtils.stringifyException(e));
