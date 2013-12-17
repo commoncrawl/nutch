@@ -219,8 +219,12 @@ public class CrawlDb extends Configured implements Tool {
       } else if (args[i].equals("-dir")) {
         Path dirPath = new Path(args[++i]);
         FileSystem fs = dirPath.getFileSystem(getConf());
-        FileStatus[] paths = fs.listStatus(dirPath, HadoopFSUtil.getPassDirectoriesFilter(fs));
-        dirs.addAll(Arrays.asList(HadoopFSUtil.getPaths(paths)));
+        FileStatus[] statuses = fs.listStatus(dirPath);
+        for (FileStatus status : statuses) {
+          if (status.isDirectory()) {
+            dirs.add(status.getPath());
+          }
+        }
       } else if ("-dbVersion".equals(args[i])) {
         dbVersion = args[++i];
       } else if (args[i].equals("-noInstall")) {
