@@ -622,11 +622,6 @@ public class Generator2 extends Configured implements Tool {
       job.setInt("mapreduce.map.memory.mb", 1536);
       job.setInt("mapreduce.reduce.memory.mb", 3500);
 
-      job.setProfileEnabled(true);
-      job.setProfileParams("-agentlib:hprof=cpu=samples,interval=50,depth=6," +
-          "force=n,thread=y,verbose=n,file=%s");
-      job.setProfileTaskRange(true, "0-1");
-
       FileInputFormat.addInputPath(job, new Path(dbDir, dbVersion));
       job.setInputFormat(SequenceFileInputFormat.class);
 
