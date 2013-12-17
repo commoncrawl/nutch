@@ -203,7 +203,6 @@ public class CrawlDb extends Configured implements Tool {
     boolean force = false;
     boolean url404Purging = false;
     boolean install = true;
-    final FileSystem fs = FileSystem.get(getConf());
     boolean additionsAllowed = getConf().getBoolean(CRAWLDB_ADDITIONS_ALLOWED, true);
     String dbVersion = CURRENT_NAME;
 
@@ -218,7 +217,9 @@ public class CrawlDb extends Configured implements Tool {
       } else if (args[i].equals("-noAdditions")) {
         additionsAllowed = false;
       } else if (args[i].equals("-dir")) {
-        FileStatus[] paths = fs.listStatus(new Path(args[++i]), HadoopFSUtil.getPassDirectoriesFilter(fs));
+        Path dirPath = new Path(args[++i]);
+        FileSystem fs = dirPath.getFileSystem(getConf());
+        FileStatus[] paths = fs.listStatus(dirPath, HadoopFSUtil.getPassDirectoriesFilter(fs));
         dirs.addAll(Arrays.asList(HadoopFSUtil.getPaths(paths)));
       } else if ("-dbVersion".equals(args[i])) {
         dbVersion = args[++i];
