@@ -123,6 +123,10 @@ public class CrawlDb extends Configured implements Tool {
     LOG.info("CrawlDb update: finished at " + sdf.format(end) + ", elapsed: " + TimingUtil.elapsedTime(start, end));
   }
 
+  public static JobConf createJob(Configuration config, Path crawlDb) throws IOException {
+    return createJob(config, crawlDb, CURRENT_NAME, crawlDb);
+  }
+
   public static JobConf createJob(Configuration config, Path crawlDb, String dbVersion, Path outputDir)
     throws IOException {
     Path newCrawlDb =
