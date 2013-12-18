@@ -88,6 +88,13 @@ public class FastURLFilter implements URLFilter {
           }
         }
       }
+
+      // Finally match the Domain '.' which allows us to build simple global rules
+      for (Rule rule : domainRules.get(".")) {
+        if (rule.match(uri)) {
+          return null;
+        }
+      }
     } catch (Exception e) {
       return null;
     }
