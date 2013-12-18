@@ -655,7 +655,7 @@ public class Generator2 extends Configured implements Tool {
 
       // Does't appear to go above 1 GB for a map
       job.setInt("mapreduce.map.memory.mb", 1536);
-      job.setInt("mapreduce.reduce.memory.mb", 2048);
+      job.setInt("mapreduce.reduce.memory.mb", 4096);
 
       FileInputFormat.addInputPath(job, stage1Dir);
       job.setInputFormat(SequenceFileInputFormat.class);
