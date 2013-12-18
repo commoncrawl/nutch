@@ -381,7 +381,7 @@ public class Generator2 extends Configured implements Tool {
         SelectorEntry entry = values.next();
 
         hostCount++;
-        if (maxCount > 0 && hostCount > maxCount * maxNumSegments) {
+        if (maxCount > 0 && hostCount >= maxCount * maxNumSegments) {
           if (hostCount == maxCount * maxNumSegments && LOG.isInfoEnabled()) {
             LOG.info("Host or domain " + key.getDomain() + " has more than " + maxCount
                 + " URLs for all " + maxNumSegments + " segments. Additional URLs won't be included in the fetchlist.");
