@@ -30,7 +30,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 // Slf4j Logging imports
 import org.apache.hadoop.fs.s3native.NativeS3FileSystem;
-import org.apache.nutch.crawl.Generator2;
 import org.apache.nutch.crawl.NullOutputCommitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -136,6 +135,7 @@ public class Fetcher extends Configured implements Tool,
   private boolean parsing;
   FetchItemQueues fetchQueues;
   QueueFeeder feeder;
+  Cache cache;
 
   /**
    * This class described the item to be fetched.
@@ -342,6 +342,13 @@ public class Fetcher extends Configured implements Tool,
         }
       } else
         nextFetchTime.set(endTime);
+    }
+
+    public synchronized void cancelAndDelay(FetchItem it) {
+      queue.add(it);
+      inProgress.remove(it);
+      nextFetchTime.set(System.currentTimeMillis() + crawlDelay);
+      crawlDelay *= 1.2;
     }
   }
 
@@ -688,6 +695,14 @@ public class Fetcher extends Configured implements Tool,
               return;
             }
           }
+
+          if (cache.exists(fit.getQueueID())) {
+            fetchQueues.getFetchItemQueue(fit.queueID).cancelAndDelay(fit);
+            continue;
+          } else {
+            cache.set(fit.getQueueID(), (int)Math.ceil((double)fetchQueues.getFetchItemQueue(fit.queueID).crawlDelay/1000));
+          }
+
           lastRequestStart.set(System.currentTimeMillis());
           Text reprUrlWritable =
             (Text) fit.datum.getMetaData().get(Nutch.WRITABLE_REPR_URL_KEY);
@@ -1221,6 +1236,9 @@ public class Fetcher extends Configured implements Tool,
     int queueDepthMuliplier =  getConf().getInt("fetcher.queue.depth.multiplier", 50);
 
     feeder = new QueueFeeder(input, fetchQueues, threadCount * queueDepthMuliplier);
+
+    cache = new Cache(getConf());
+
     //feeder.setPriority((Thread.MAX_PRIORITY + Thread.NORM_PRIORITY) / 2);
 
     // the value of the time limit is either -1 or the time where it should finish

@@ -78,6 +78,8 @@
 
                 <dependency org="commons-codec" name="commons-codec" rev="1.8" />
 
+                <dependency org="net.spy" name="spymemcached" rev="2.10.3" />
+
 		<!--Configuration: test -->
 
 		<!--artifacts needed for testing -->
