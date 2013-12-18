@@ -833,7 +833,6 @@ public class Generator2 extends Configured implements Tool {
         stage2 = args[++i];
       } else if ("-dbVersion".equals(args[i])) {
         dbVersion = args[++i];
-        i++;
       }
     }
 
