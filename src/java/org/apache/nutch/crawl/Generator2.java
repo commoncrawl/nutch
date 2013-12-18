@@ -745,9 +745,7 @@ public class Generator2 extends Configured implements Tool {
     job.setLong("mapred.min.split.size", Long.MAX_VALUE);
     job.setInt("num.lists", numLists);
 
-    // XX not tested
-    job.setInt("mapreduce.map.memory.mb", 2048);
-    job.setInt("mapreduce.reduce.memory.mb", 2048);
+    job.setInt("mapreduce.map.memory.mb", 4096);
 
     job.setNumReduceTasks(0);
 
@@ -832,10 +830,9 @@ public class Generator2 extends Configured implements Tool {
       } else if ("-keep".equals(args[i])) {
         keep = true;
       } else if ("-stage2".equals(args[i])) {
-        stage2 = args[i+1];
-        i++;
+        stage2 = args[++i];
       } else if ("-dbVersion".equals(args[i])) {
-        dbVersion = args[i+1];
+        dbVersion = args[++i];
         i++;
       }
     }
