@@ -386,8 +386,8 @@ public class Generator2 extends Configured implements Tool {
             LOG.info("Host or domain " + key.getDomain() + " has more than " + maxCount
                 + " URLs for all " + maxNumSegments + " segments. Additional URLs won't be included in the fetchlist.");
           }
-          reporter.getCounter("Generator", "SKIPPED_RECORDS_HOST_OVERFLOW").increment(1);
-          continue;
+          reporter.getCounter("Generator", "SKIPPED_DOMAINS_OVERFLOW").increment(1);
+          return;
         }
         output.collect(key.getScore(), entry);
       }
