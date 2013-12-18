@@ -657,6 +657,9 @@ public class Generator2 extends Configured implements Tool {
       job.setInt("mapreduce.map.memory.mb", 1536);
       job.setInt("mapreduce.reduce.memory.mb", 4096);
 
+      job.setSpeculativeExecution(true);
+      job.setReduceSpeculativeExecution(true);
+
       FileInputFormat.addInputPath(job, stage1Dir);
       job.setInputFormat(SequenceFileInputFormat.class);
 
