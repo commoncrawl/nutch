@@ -202,7 +202,8 @@ public class Fetcher extends Configured implements Tool,
           key=u.toExternalForm();
         }
       }
-      queueID = proto + "://" + key.toLowerCase();
+      // TODO: This should be fixed in a better way - we don't want to fetch from the same host on http and https simultaneously
+      queueID = /* proto + */ "://" + key.toLowerCase();
       return new FetchItem(url, u, datum, queueID, outlinkDepth);
     }
 
