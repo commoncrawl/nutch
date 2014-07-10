@@ -870,8 +870,8 @@ public class Fetcher extends Configured implements Tool,
               case ProtocolStatus.GONE:           // gone
               case ProtocolStatus.NOTFOUND:
               case ProtocolStatus.ACCESS_DENIED:
+              	updateStatus(0);
               case ProtocolStatus.ROBOTS_DENIED:
-            	updateStatus(0);
                 output(fit.url, fit.datum, null, status, CrawlDatum.STATUS_FETCH_GONE);
                 break;
 
