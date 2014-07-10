@@ -814,6 +814,7 @@ public class Fetcher extends Configured implements Tool,
 
               case ProtocolStatus.MOVED:         // redirect
               case ProtocolStatus.TEMP_MOVED:
+            	updateStatus(0);
                 int code;
                 boolean temp;
                 if (status.getCode() == ProtocolStatus.MOVED) {
@@ -870,10 +871,12 @@ public class Fetcher extends Configured implements Tool,
               case ProtocolStatus.NOTFOUND:
               case ProtocolStatus.ACCESS_DENIED:
               case ProtocolStatus.ROBOTS_DENIED:
+            	updateStatus(0);
                 output(fit.url, fit.datum, null, status, CrawlDatum.STATUS_FETCH_GONE);
                 break;
 
               case ProtocolStatus.NOTMODIFIED:
+            	updateStatus(0);
                 output(fit.url, fit.datum, null, status, CrawlDatum.STATUS_FETCH_NOTMODIFIED);
                 break;
 
