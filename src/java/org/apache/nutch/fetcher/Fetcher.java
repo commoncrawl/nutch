@@ -726,6 +726,12 @@ public class Fetcher extends Configured implements Tool,
               }
               redirecting = false;
               Protocol protocol = this.protocolFactory.getProtocol(fit.url.toString());
+              // Filter out URLs that match the fast filter rules before any steps are taken
+              if (urlFilters.filter(fit.url.toString()) == null) {
+                reporter.incrCounter("FetcherStatus", "filter_denied", 1);
+                output(fit.url, fit.datum, null, ProtocolStatus.STATUS_ROBOTS_DENIED, CrawlDatum.STATUS_FETCH_GONE);
+                continue;
+              }
               BaseRobotRules rules = protocol.getRobotRules(fit.url, fit.datum);
               if (!rules.isAllowed(fit.u.toString())) {
                 // unblock
