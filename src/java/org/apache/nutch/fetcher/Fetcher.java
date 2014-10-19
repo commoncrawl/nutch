@@ -762,6 +762,13 @@ public class Fetcher extends Configured implements Tool,
                 }
               }
               long startTime = System.currentTimeMillis();
+
+              // Set the modified time to null such that we never get NotModified
+              // Important to ensure we always refetch important pages, even if they don't change
+              // Parts stolen from AbstractFetchSchedule#forceRefetch
+              fit.datum.setSignature(null);
+              fit.datum.setModifiedTime(0L);
+
               ProtocolOutput output = protocol.getProtocolOutput(fit.url, fit.datum);
               fit.datum.getMetaData().put(new Text(Nutch.FETCH_DURATION_KEY), new Text(Long.toString(System.currentTimeMillis() - startTime)));
 
@@ -1295,6 +1302,8 @@ public class Fetcher extends Configured implements Tool,
       reporter.incrCounter("FetcherStatus", "bytes_downloaded", bytesLastSec);
 
       reportStatus(pagesLastSec, bytesLastSec);
+      // Report the total pages fetched to this point of time for metrics
+      LOG.info("STATS: {'elapsed'=" + TimingUtil.elapsedTime(start, System.currentTimeMillis()) + ", 'total_pages': " + pages.get() + "}");
 
       LOG.info("-activeThreads=" + activeThreads + ", spinWaiting=" + spinWaiting.get()
           + ", fetchQueues.totalSize=" + fetchQueues.getTotalSize());
