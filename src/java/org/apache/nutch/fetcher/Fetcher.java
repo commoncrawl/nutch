@@ -766,8 +766,8 @@ public class Fetcher extends Configured implements Tool,
               // Set the modified time to null such that we never get NotModified
               // Important to ensure we always refetch important pages, even if they don't change
               // Parts stolen from AbstractFetchSchedule#forceRefetch
-              fit.datum.setSignature(null);
-              fit.datum.setModifiedTime(0L);
+              //fit.datum.setSignature(null);
+              //fit.datum.setModifiedTime(0L);
 
               ProtocolOutput output = protocol.getProtocolOutput(fit.url, fit.datum);
               fit.datum.getMetaData().put(new Text(Nutch.FETCH_DURATION_KEY), new Text(Long.toString(System.currentTimeMillis() - startTime)));
@@ -1267,9 +1267,13 @@ public class Fetcher extends Configured implements Tool,
     getConf().setBoolean(Protocol.CHECK_BLOCKING, false);
     getConf().setBoolean(Protocol.CHECK_ROBOTS, false);
 
-    for (int i = 0; i < threadCount; i++) {       // spawn threads
-      new FetcherThread(getConf()).start();
-    }
+    //for (int i = 0; i < threadCount; i++) {       // spawn threads
+    //  new FetcherThread(getConf()).start();
+    //}
+    // Slow roll the start
+    int totalFetcherThreads = 1;
+    int secondCount = 0;
+    new FetcherThread(getConf()).start();
 
     // select a timeout that avoids a task timeout
     long timeout = getConf().getInt("mapred.task.timeout", 10*60*1000)/timeoutDivisor;
@@ -1291,6 +1295,12 @@ public class Fetcher extends Configured implements Tool,
     do {                                          // wait for threads to exit
       pagesLastSec = pages.get();
       bytesLastSec = (int)bytes.get();
+      // Add a fetcher once every ten seconds if we're below max threads
+      secondCount += 1;
+      if (secondCount % 10 == 0 && totalFetcherThreads < threadCount) {
+        totalFetcherThreads += 1;
+        new FetcherThread(getConf()).start();
+      }
 
       try {
         Thread.sleep(1000);
@@ -1303,7 +1313,7 @@ public class Fetcher extends Configured implements Tool,
 
       reportStatus(pagesLastSec, bytesLastSec);
       // Report the total pages fetched to this point of time for metrics
-      LOG.info("STATS: {'elapsed'=" + TimingUtil.elapsedTime(start, System.currentTimeMillis()) + ", 'total_pages': " + pages.get() + "}");
+      LOG.info("STATS: dict(elapsed='" + TimingUtil.elapsedTime(start, System.currentTimeMillis()) + "', pages=" + pages.get() + ")");
 
       LOG.info("-activeThreads=" + activeThreads + ", spinWaiting=" + spinWaiting.get()
           + ", fetchQueues.totalSize=" + fetchQueues.getTotalSize());
