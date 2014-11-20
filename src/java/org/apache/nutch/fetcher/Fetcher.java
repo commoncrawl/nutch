@@ -1267,13 +1267,13 @@ public class Fetcher extends Configured implements Tool,
     getConf().setBoolean(Protocol.CHECK_BLOCKING, false);
     getConf().setBoolean(Protocol.CHECK_ROBOTS, false);
 
-    //for (int i = 0; i < threadCount; i++) {       // spawn threads
-    //  new FetcherThread(getConf()).start();
-    //}
     // Slow roll the start
-    int totalFetcherThreads = 1;
+    int totalFetcherThreads = 0;
     int secondCount = 0;
-    new FetcherThread(getConf()).start();
+    for (int i = 0; i < 10; i++) {
+        totalFetcherThreads += 1;
+        new FetcherThread(getConf()).start();
+    }
 
     // select a timeout that avoids a task timeout
     long timeout = getConf().getInt("mapred.task.timeout", 10*60*1000)/timeoutDivisor;
@@ -1297,7 +1297,7 @@ public class Fetcher extends Configured implements Tool,
       bytesLastSec = (int)bytes.get();
       // Add a fetcher once every ten seconds if we're below max threads
       secondCount += 1;
-      if (secondCount % 10 == 0 && totalFetcherThreads < threadCount) {
+      if (secondCount % 240 == 0 && totalFetcherThreads < threadCount) {
         totalFetcherThreads += 1;
         new FetcherThread(getConf()).start();
       }
