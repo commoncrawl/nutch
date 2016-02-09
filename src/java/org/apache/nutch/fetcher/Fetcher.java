@@ -1247,6 +1247,13 @@ public class Fetcher extends Configured implements Tool,
     int threadCount = getConf().getInt("fetcher.threads.fetch", 10);
     if (LOG.isInfoEnabled()) { LOG.info("Fetcher: threads: " + threadCount); }
 
+    int initialthreadCount = getConf().getInt("fetcher.threads.initial", 10);
+    if (initialthreadCount > threadCount) initialthreadCount = threadCount;
+    if (LOG.isInfoEnabled()) { LOG.info("Fetcher: initial threads: " + initialthreadCount); }
+
+    int rampUpDelay = getConf().getInt("fetcher.threads.rampup.delay", 30);
+    if (LOG.isInfoEnabled()) { LOG.info("Fetcher: rampUpDelay: " + rampUpDelay); }
+
     int timeoutDivisor = getConf().getInt("fetcher.threads.timeout.divisor", 2);
     if (LOG.isInfoEnabled()) { LOG.info("Fetcher: time-out divisor: " + timeoutDivisor); }
 
@@ -1270,7 +1277,7 @@ public class Fetcher extends Configured implements Tool,
     // Slow roll the start
     int totalFetcherThreads = 0;
     int secondCount = 0;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < initialthreadCount; i++) {
         totalFetcherThreads += 1;
         new FetcherThread(getConf()).start();
     }
@@ -1295,9 +1302,9 @@ public class Fetcher extends Configured implements Tool,
     do {                                          // wait for threads to exit
       pagesLastSec = pages.get();
       bytesLastSec = (int)bytes.get();
-      // Add a fetcher once every ten seconds if we're below max threads
+      // Add a fetcher once every X seconds if we're below max threads
       secondCount += 1;
-      if (secondCount % 240 == 0 && totalFetcherThreads < threadCount) {
+      if (secondCount % rampUpDelay == 0 && totalFetcherThreads < threadCount) {
         totalFetcherThreads += 1;
         new FetcherThread(getConf()).start();
       }
