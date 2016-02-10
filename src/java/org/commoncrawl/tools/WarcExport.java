@@ -200,6 +200,7 @@ public class WarcExport extends Configured implements Tool {
         }
 
         boolean useVerbatimResponseHeaders = false;
+        boolean wasZipped = false;
         String truncatedReason = null;
 
         for (String name : value.content.getMetadata().names()) {
@@ -228,6 +229,11 @@ public class WarcExport extends Configured implements Tool {
             if (name.equalsIgnoreCase("Content-Length")) {
               headers += "Content-Length: " + value.content.getContent().length + CRLF;
             } else if (name.equalsIgnoreCase("Content-Encoding")) {
+              // we know that the content length can't be trusted 
+              String ce = value.content.getMetadata().get(name);
+              if ("gzip".equals(ce) || "x-gzip".equals(ce) || "deflate".equals(ce)) {
+                wasZipped = true;
+              } 
             } else if (name.equalsIgnoreCase("Transfer-Encoding")) {
             } else {
               headers += name + ": " + value.content.getMetadata().get(name) + CRLF;
@@ -246,7 +252,7 @@ public class WarcExport extends Configured implements Tool {
           return;
         }
 
-        if (useVerbatimResponseHeaders && verbatimResponseHeaders != null) {
+        if (useVerbatimResponseHeaders && verbatimResponseHeaders != null && !wasZipped) {
           headers = verbatimResponseHeaders;
         }
 
