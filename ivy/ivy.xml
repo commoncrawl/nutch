@@ -74,7 +74,7 @@
 		<dependency org="oro" name="oro" rev="2.0.8" />
 
 		<dependency org="com.google.guava" name="guava" rev="11.0.2" />
-                <dependency org="com.google.code.crawler-commons" name="crawler-commons" rev="0.2" />
+                <dependency org="com.github.crawler-commons" name="crawler-commons" rev="0.6" />
 
                 <dependency org="commons-codec" name="commons-codec" rev="1.8" />
 
