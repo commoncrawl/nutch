@@ -128,7 +128,7 @@ public class Generator2 extends Configured implements Tool {
     public boolean equals(Object right) {
       if (right instanceof DomainScorePair) {
         DomainScorePair r = (DomainScorePair) right;
-        return r.domain == domain && r.score == score;
+        return r.domain.equals(domain) && r.score.equals(score);
       } else {
         return false;
       }
