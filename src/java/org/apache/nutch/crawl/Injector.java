@@ -315,7 +315,7 @@ public class Injector extends Configured implements Tool {
     CrawlDb.install(mergeJob, crawlDb);
 
     // clean up
-    FileSystem fs = FileSystem.get(getConf());
+    FileSystem fs = tempDir.getFileSystem(getConf());
     fs.delete(tempDir, true);
 
     long end = System.currentTimeMillis();

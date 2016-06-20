@@ -148,8 +148,8 @@ public class SegmentMerger extends Configured implements
         throw new RuntimeException("Cannot identify segment:", e);
       }
       
-      SequenceFile.Reader reader =
-        new SequenceFile.Reader(FileSystem.get(job), fSplit.getPath(), job);
+      SequenceFile.Reader reader = new SequenceFile.Reader(job,
+          SequenceFile.Reader.file(fSplit.getPath()));
       
       final Writable w;
       try {
@@ -556,7 +556,6 @@ public class SegmentMerger extends Configured implements
     job.setBoolean("segment.merger.normalizer", normalize);
     job.setLong("segment.merger.slice", slice);
     job.set("segment.merger.segmentName", segmentName);
-    FileSystem fs = FileSystem.get(getConf());
     // prepare the minimal common set of input dirs
     boolean g = true;
     boolean f = true;
@@ -565,6 +564,7 @@ public class SegmentMerger extends Configured implements
     boolean pd = true;
     boolean pt = true;
     for (int i = 0; i < segs.length; i++) {
+      FileSystem fs = segs[i].getFileSystem(job);
       if (!fs.exists(segs[i])) {
         if (LOG.isWarnEnabled()) {
           LOG.warn("Input dir " + segs[i] + " doesn't exist, skipping.");
@@ -652,7 +652,6 @@ public class SegmentMerger extends Configured implements
       return;
     }
     Configuration conf = NutchConfiguration.create();
-    final FileSystem fs = FileSystem.get(conf);
     Path out = new Path(args[0]);
     ArrayList<Path> segs = new ArrayList<Path>();
     long sliceSize = 0;
@@ -660,7 +659,9 @@ public class SegmentMerger extends Configured implements
     boolean normalize = false;
     for (int i = 1; i < args.length; i++) {
       if (args[i].equals("-dir")) {
-        FileStatus[] fstats = fs.listStatus(new Path(args[++i]),
+        Path dirPath = new Path(args[++i]);
+        FileSystem fs = dirPath.getFileSystem(conf);
+        FileStatus[] fstats = fs.listStatus(dirPath,
             HadoopFSUtil.getPassDirectoriesFilter(fs));
         Path[] files = HadoopFSUtil.getPaths(fstats);
         for (int j = 0; j < files.length; j++)

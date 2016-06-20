@@ -77,7 +77,6 @@ public class SegmentReader extends Configured implements
   long recNo = 0L;
   
   private boolean co, fe, ge, pa, pd, pt;
-  private FileSystem fs;
 
   public static class InputCompatMapper extends MapReduceBase implements
       Mapper<WritableComparable, Writable, Text, NutchWritable> {
@@ -134,11 +133,6 @@ public class SegmentReader extends Configured implements
     this.pa = pa;
     this.pd = pd;
     this.pt = pt;
-    try {
-      this.fs = FileSystem.get(getConf());
-    } catch (IOException e) {
-      LOG.error("IOException:", e);
-    }
   }
 
   public void configure(JobConf job) {
@@ -149,11 +143,6 @@ public class SegmentReader extends Configured implements
     this.pa = getConf().getBoolean("segment.reader.pa", true);
     this.pd = getConf().getBoolean("segment.reader.pd", true);
     this.pt = getConf().getBoolean("segment.reader.pt", true);
-    try {
-      this.fs = FileSystem.get(getConf());
-    } catch (IOException e) {
-      LOG.error("IOException:", e);
-    }
   }
 
   private JobConf createJobConf() {
@@ -214,6 +203,7 @@ public class SegmentReader extends Configured implements
     job.setReducerClass(SegmentReader.class);
 
     Path tempDir = new Path(job.get("hadoop.tmp.dir", "/tmp") + "/segread-" + new java.util.Random().nextInt());
+    FileSystem fs = tempDir.getFileSystem(job);
     fs.delete(tempDir, true);
     
     FileOutputFormat.setOutputPath(job, tempDir);
@@ -225,16 +215,17 @@ public class SegmentReader extends Configured implements
 
     // concatenate the output
     Path dumpFile = new Path(output, job.get("segment.dump.dir", "dump"));
+    FileSystem outFs = dumpFile.getFileSystem(job);
 
     // remove the old file
-    fs.delete(dumpFile, true);
+    outFs.delete(dumpFile, true);
     FileStatus[] fstats = fs.listStatus(tempDir, HadoopFSUtil.getPassAllFilter());
     Path[] files = HadoopFSUtil.getPaths(fstats);
 
     PrintWriter writer = null;
     int currentRecordNumber = 0;
     if (files.length > 0) {
-      writer = new PrintWriter(new BufferedWriter(new OutputStreamWriter(fs.create(dumpFile))));
+      writer = new PrintWriter(new BufferedWriter(new OutputStreamWriter(outFs.create(dumpFile))));
       try {
         for (int i = 0; i < files.length; i++) {
           Path partFile = files[i];
@@ -377,6 +368,7 @@ public class SegmentReader extends Configured implements
   }
   
   private List<Writable> getMapRecords(Path dir, Text key) throws Exception {
+    FileSystem fs = dir.getFileSystem(getConf());
     MapFile.Reader[] readers = MapFileOutputFormat.getReaders(fs, dir, getConf());
     ArrayList<Writable> res = new ArrayList<Writable>();
     Class keyClass = readers[0].getKeyClass();
@@ -463,6 +455,7 @@ public class SegmentReader extends Configured implements
     SequenceFile.Reader[] readers = SequenceFileOutputFormat.getReaders(getConf(), new Path(segment, CrawlDatum.GENERATE_DIR_NAME));
     long cnt = 0L;
     Text key = new Text();
+    FileSystem fs = segment.getFileSystem(getConf());
     for (int i = 0; i < readers.length; i++) {
       while (readers[i].next(key)) cnt++;
       readers[i].close();
@@ -552,7 +545,6 @@ public class SegmentReader extends Configured implements
       }
     }
     Configuration conf = NutchConfiguration.create();
-    final FileSystem fs = FileSystem.get(conf);
     SegmentReader segmentReader = new SegmentReader(conf, co, fe, ge, pa, pd, pt);
     // collect required args
     switch (mode) {
@@ -577,6 +569,7 @@ public class SegmentReader extends Configured implements
           if (args[i] == null) continue;
           if (args[i].equals("-dir")) {
             Path dir = new Path(args[++i]);
+            FileSystem fs = dir.getFileSystem(conf);
             FileStatus[] fstats = fs.listStatus(dir, HadoopFSUtil.getPassDirectoriesFilter(fs));
             Path[] files = HadoopFSUtil.getPaths(fstats);
             if (files != null && files.length > 0) {

@@ -154,7 +154,7 @@ public class LinkDb extends Configured implements Tool, Mapper<Text, ParseData, 
   public void invert(Path linkDb, Path[] segments, boolean normalize, boolean filter, boolean force) throws IOException {
     JobConf job = LinkDb.createJob(getConf(), linkDb, normalize, filter);
     Path lock = new Path(linkDb, LOCK_NAME);
-    FileSystem fs = FileSystem.get(getConf());
+    FileSystem fs = linkDb.getFileSystem(getConf());
     LockUtil.createLockFile(fs, lock, force);
     Path currentLinkDb = new Path(linkDb, CURRENT_NAME);
 
@@ -221,7 +221,7 @@ public class LinkDb extends Configured implements Tool, Mapper<Text, ParseData, 
     // if we don't run the mergeJob, perform normalization/filtering now
     if (normalize || filter) {
       try {
-        FileSystem fs = FileSystem.get(config);
+        FileSystem fs = linkDb.getFileSystem(config);
         if (!fs.exists(linkDb)) {
           job.setBoolean(LinkDbFilter.URL_FILTERING, filter);
           job.setBoolean(LinkDbFilter.URL_NORMALIZING, normalize);
@@ -243,7 +243,7 @@ public class LinkDb extends Configured implements Tool, Mapper<Text, ParseData, 
 
   public static void install(JobConf job, Path linkDb) throws IOException {
     Path newLinkDb = FileOutputFormat.getOutputPath(job);
-    FileSystem fs = new JobClient(job).getFs();
+    FileSystem fs = linkDb.getFileSystem(job);
     Path old = new Path(linkDb, "old");
     Path current = new Path(linkDb, CURRENT_NAME);
     if (fs.exists(current)) {
