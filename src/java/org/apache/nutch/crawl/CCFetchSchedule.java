@@ -43,6 +43,14 @@ public class CCFetchSchedule extends DefaultFetchSchedule {
   }
 
   @Override
+  public boolean shouldFetch(Text url, CrawlDatum datum, long curTime) {
+    if (datum.getFetchTime() > curTime) {
+      return false; // not time yet
+    }
+    return true;
+  }
+
+  @Override
   public CrawlDatum setPageGoneSchedule(Text url, CrawlDatum datum,
       long prevFetchTime, long prevModifiedTime, long fetchTime) {
     if (resetFetchInterval && datum.getFetchInterval() != defaultInterval) {
