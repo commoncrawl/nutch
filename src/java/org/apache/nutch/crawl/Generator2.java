@@ -383,12 +383,14 @@ public class Generator2 extends Configured implements Tool {
         hostCount++;
         if (maxCount > 0 && hostCount >= maxCount * maxNumSegments) {
           if (hostCount == maxCount * maxNumSegments && LOG.isInfoEnabled()) {
-            LOG.info("Host or domain " + key.getDomain() + " has more than " + maxCount
+            LOG.info("Host or domain " + key.getDomain() + " has more than " + maxCount * maxNumSegments
                 + " URLs for all " + maxNumSegments + " segments. Additional URLs won't be included in the fetchlist.");
           }
           reporter.getCounter("Generator", "SKIPPED_DOMAINS_OVERFLOW").increment(1);
           return;
         }
+        reporter.getCounter("Selected by status",
+            CrawlDatum.getStatusName(entry.datum.getStatus())).increment(1);
         output.collect(key.getScore(), entry);
       }
     }
