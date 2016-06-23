@@ -1248,6 +1248,27 @@
   </description>
 </property>
 
+<!-- scoring-adaptive -->
+
+<property>
+  <name>db.score.adaptive.factor.fetchtime</name>
+  <value>.05</value>
+  <description>
+    Sort value factor for pages to be (re)fetched based on the time
+    (in days) elapsed since the fetch time:
+      generator_sort_value += (factor * log2(1+days_elapsed))
+  </description>
+</property>
+
+<property>
+  <name>db.score.adaptive.sort.by_status.file</name>
+  <value>adaptive-scoring.txt</value>
+  <description>
+    File containing sort values by CrawlDatum status.
+  </description>
+</property>
+
+
 <!-- language-identifier plugin properties -->
 
 <property>
