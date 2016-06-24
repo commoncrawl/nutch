@@ -43,9 +43,9 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
   private final static Logger LOG = LoggerFactory
       .getLogger(AdaptiveScoringFilter.class);
 
-  public static final String ADAPTIVE_FETCH_TIME_SORT_FACTOR = "db.score.adaptive.sort.by_status.file";
+  public static final String ADAPTIVE_FETCH_TIME_SORT_FACTOR = "db.score.adaptive.factor.fetchtime";
 
-  public static final String ADAPTIVE_STATUS_SORT_FACTOR_FILE = "db.score.adaptive.factor.status.file";
+  public static final String ADAPTIVE_STATUS_SORT_FACTOR_FILE = "db.score.adaptive.sort.by_status.file";
 
   private Configuration conf;
 
