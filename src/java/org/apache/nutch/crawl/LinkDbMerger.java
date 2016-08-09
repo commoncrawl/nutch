@@ -120,9 +120,8 @@ public class LinkDbMerger extends Configured implements Tool, Reducer<Text, Inli
   }
 
   public static JobConf createMergeJob(Configuration config, Path linkDb, boolean normalize, boolean filter) {
-    Path newLinkDb =
-      new Path("linkdb-merge-" + 
-               Integer.toString(new Random().nextInt(Integer.MAX_VALUE)));
+    Path newLinkDb = new Path(linkDb,
+        "merge-" + Integer.toString(new Random().nextInt(Integer.MAX_VALUE)));
 
     JobConf job = new NutchJob(config);
     job.setJobName("linkdb merge " + linkDb);
