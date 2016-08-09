@@ -20,16 +20,15 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.text.SimpleDateFormat;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.Random;
-import java.util.Arrays;
 
+import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.Counters.Group;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
@@ -50,7 +49,6 @@ import org.apache.nutch.crawl.CrawlDb;
 import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
-import org.apache.nutch.util.NutchTool;
 import org.apache.nutch.util.TimingUtil;
 import org.apache.nutch.util.URLUtil;
 import org.slf4j.Logger;
@@ -65,14 +63,14 @@ import org.slf4j.LoggerFactory;
  * then the one with the shortest URL is kept. The documents marked as duplicate
  * can then be deleted with the command CleaningJob.
  ***/
-public class DeduplicationJob extends NutchTool implements Tool {
+public class DeduplicationJob extends Configured implements Tool {
 
   public static final Logger LOG = LoggerFactory
       .getLogger(DeduplicationJob.class);
 
-  private final static Text urlKey = new Text("_URLTEMPKEY_");
-  private final static String DEDUPLICATION_GROUP_MODE = "deduplication.group.mode";
-  private final static String DEDUPLICATION_COMPARE_ORDER = "deduplication.compare.order";
+  protected final static Text urlKey = new Text("_URLTEMPKEY_");
+  protected final static String DEDUPLICATION_GROUP_MODE = "deduplication.group.mode";
+  protected final static String DEDUPLICATION_COMPARE_ORDER = "deduplication.compare.order";
 
   public static class DBFilter implements
       Mapper<Text, CrawlDatum, BytesWritable, CrawlDatum> {
@@ -80,8 +78,8 @@ public class DeduplicationJob extends NutchTool implements Tool {
     private String groupMode;
 
     @Override
-    public void configure(JobConf arg0) {
-      groupMode = arg0.get(DEDUPLICATION_GROUP_MODE);
+    public void configure(JobConf conf) {
+      groupMode = conf.get(DEDUPLICATION_GROUP_MODE);
     }
 
     @Override
@@ -95,7 +93,6 @@ public class DeduplicationJob extends NutchTool implements Tool {
 
       if (value.getStatus() == CrawlDatum.STATUS_DB_FETCHED
           || value.getStatus() == CrawlDatum.STATUS_DB_NOTMODIFIED) {
-        // || value.getStatus() ==CrawlDatum.STATUS_DB_GONE){
         byte[] signature = value.getSignature();
         if (signature == null)
           return;
@@ -123,14 +120,14 @@ public class DeduplicationJob extends NutchTool implements Tool {
         }
         // add the URL as a temporary MD
         value.getMetaData().put(urlKey, key);
-        // reduce on the signature optionall grouped on host or domain or not at all
+        // reduce on the signature optionally grouped on host or domain or not at all
         output.collect(sig, value);
       }
     }
   }
 
-  public static class DedupReducer implements
-      Reducer<BytesWritable, CrawlDatum, Text, CrawlDatum> {
+  public static class DedupReducer<K extends Writable> implements
+      Reducer<K, CrawlDatum, Text, CrawlDatum> {
 
     private String[] compareOrder;
     
@@ -139,7 +136,7 @@ public class DeduplicationJob extends NutchTool implements Tool {
       compareOrder = arg0.get(DEDUPLICATION_COMPARE_ORDER).split(",");
     }
 
-    private void writeOutAsDuplicate(CrawlDatum datum,
+    protected void writeOutAsDuplicate(CrawlDatum datum,
         OutputCollector<Text, CrawlDatum> output, Reporter reporter)
         throws IOException {
       datum.setStatus(CrawlDatum.STATUS_DB_DUPLICATE);
@@ -150,12 +147,10 @@ public class DeduplicationJob extends NutchTool implements Tool {
     }
 
     @Override
-    public void reduce(BytesWritable key, Iterator<CrawlDatum> values,
+    public void reduce(K key, Iterator<CrawlDatum> values,
         OutputCollector<Text, CrawlDatum> output, Reporter reporter)
         throws IOException {
       CrawlDatum existingDoc = null;
-
-      outerloop:
       while (values.hasNext()) {
         if (existingDoc == null) {
           existingDoc = new CrawlDatum();
@@ -163,63 +158,64 @@ public class DeduplicationJob extends NutchTool implements Tool {
           continue;
         }
         CrawlDatum newDoc = values.next();
-
-        for (int i = 0; i < compareOrder.length; i++) {
-          switch (compareOrder[i]) {
-            case "score":
-              // compare based on score
-              if (existingDoc.getScore() < newDoc.getScore()) {
-                writeOutAsDuplicate(existingDoc, output, reporter);
-                existingDoc = new CrawlDatum();
-                existingDoc.set(newDoc);
-                continue outerloop;
-              } else if (existingDoc.getScore() > newDoc.getScore()) {
-                // mark new one as duplicate
-                writeOutAsDuplicate(newDoc, output, reporter);
-                continue outerloop;
-              }
-              break;
-            case "fetchTime":
-              // same score? delete the one which is oldest
-              if (existingDoc.getFetchTime() > newDoc.getFetchTime()) {
-                // mark new one as duplicate
-                writeOutAsDuplicate(newDoc, output, reporter);
-                continue outerloop;
-              } else if (existingDoc.getFetchTime() < newDoc.getFetchTime()) {
-                // mark existing one as duplicate
-                writeOutAsDuplicate(existingDoc, output, reporter);
-                existingDoc = new CrawlDatum();
-                existingDoc.set(newDoc);
-                continue outerloop;
-              }
-              break;
-            case "urlLength":
-              // same time? keep the one which has the shortest URL
-              String urlExisting;
-              String urlnewDoc;
-              try {
-                urlExisting = URLDecoder.decode(existingDoc.getMetaData().get(urlKey).toString(), "UTF8");
-                urlnewDoc = URLDecoder.decode(newDoc.getMetaData().get(urlKey).toString(), "UTF8");
-              } catch (UnsupportedEncodingException e) {
-                LOG.error("Error decoding: " + urlKey);
-                throw new IOException("UnsupportedEncodingException for " + urlKey);
-              }
-              if (urlExisting.length() < urlnewDoc.length()) {
-                // mark new one as duplicate
-                writeOutAsDuplicate(newDoc, output, reporter);
-                continue outerloop;
-              } else if (urlExisting.length() > urlnewDoc.length()) {
-                // mark existing one as duplicate
-                writeOutAsDuplicate(existingDoc, output, reporter);
-                existingDoc = new CrawlDatum();
-                existingDoc.set(newDoc);
-                continue outerloop;
-              }
-              break;
+        CrawlDatum duplicate = getDuplicate(existingDoc, newDoc);
+        if (duplicate != null) {
+          writeOutAsDuplicate(duplicate, output, reporter);
+          if (duplicate == existingDoc) {
+            // keep new
+            existingDoc.set(newDoc);
           }
         }
-
       }
+    }
+
+    protected CrawlDatum getDuplicate(CrawlDatum existingDoc,
+        CrawlDatum newDoc) throws IOException {
+      for (int i = 0; i < compareOrder.length; i++) {
+        switch (compareOrder[i]) {
+        case "score":
+          // compare based on score
+          if (existingDoc.getScore() < newDoc.getScore()) {
+            return existingDoc;
+          } else if (existingDoc.getScore() > newDoc.getScore()) {
+            // mark new one as duplicate
+            return newDoc;
+          }
+          break;
+        case "fetchTime":
+          // same score? delete the one which is oldest
+          if (existingDoc.getFetchTime() > newDoc.getFetchTime()) {
+            // mark new one as duplicate
+            return newDoc;
+          } else if (existingDoc.getFetchTime() < newDoc.getFetchTime()) {
+            // mark existing one as duplicate
+            return existingDoc;
+          }
+          break;
+        case "urlLength":
+          // same time? keep the one which has the shortest URL
+          String urlExisting;
+          String urlnewDoc;
+          try {
+            urlExisting = URLDecoder.decode(
+                existingDoc.getMetaData().get(urlKey).toString(), "UTF8");
+            urlnewDoc = URLDecoder
+                .decode(newDoc.getMetaData().get(urlKey).toString(), "UTF8");
+          } catch (UnsupportedEncodingException e) {
+            LOG.error("Error decoding: " + urlKey);
+            throw new IOException("UnsupportedEncodingException for " + urlKey);
+          }
+          if (urlExisting.length() < urlnewDoc.length()) {
+            // mark new one as duplicate
+            return newDoc;
+          } else if (urlExisting.length() > urlnewDoc.length()) {
+            // mark existing one as duplicate
+            return existingDoc;
+          }
+          break;
+        }
+      }
+      return null; // no decision possible
     }
 
     @Override
@@ -368,22 +364,5 @@ public class DeduplicationJob extends NutchTool implements Tool {
     int result = ToolRunner.run(NutchConfiguration.create(),
         new DeduplicationJob(), args);
     System.exit(result);
-  }
-
-  @Override
-  public Map<String, Object> run(Map<String, Object> args, String crawlId) throws Exception {
-    Map<String, Object> results = new HashMap<String, Object>();
-    String[] arg = new String[1];
-    String crawldb;
-    if(args.containsKey(Nutch.ARG_CRAWLDB)) {
-      crawldb = (String)args.get(Nutch.ARG_CRAWLDB);
-    }
-    else {
-      crawldb = crawlId+"/crawldb";
-    }
-    arg[0] = crawldb;
-    int res = run(arg);
-    results.put(Nutch.VAL_RESULT, Integer.toString(res));
-    return results;
   }
 }
