@@ -27,6 +27,7 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.nutch.metadata.Nutch;
+import org.apache.nutch.net.protocols.HttpDateFormat;
 import org.apache.nutch.parse.ParseData;
 import org.apache.nutch.parse.ParseText;
 import org.apache.nutch.protocol.Content;
@@ -51,6 +52,7 @@ import java.net.URISyntaxException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.NumberFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -111,17 +113,26 @@ public class WarcExport extends Configured implements Tool {
       private WarcWriter warcWriter;
       private DataOutputStream textWarcOut;
       private WarcWriter textWarcWriter;
+      private DataOutputStream crawlDiagnosticsWarcOut;
+      private WarcWriter crawlDiagnosticsWarcWriter;
+      private DataOutputStream robotsTxtWarcOut;
+      private WarcWriter robotsTxtWarcWriter;
       private URI warcinfoId;
       private URI textWarcinfoId;
+      private URI crawlDiagnosticsWarcinfoId;
+      private URI robotsTxtWarcinfoId;
       private final String CRLF = "\r\n";
       private final String COLONSP = ": ";
       private MessageDigest sha1 = null;
       private Base32 base32 = null;
       private boolean generateText;
+      private boolean generateCrawlDiagnostics;
+      private boolean generateRobotsTxt;
 
       public WarcRecordWriter(TaskAttemptContext context, Path outputPath, String filename, String textFilename,
                               String hostname, String publisher, String operator, String software, String isPartOf,
-                              String description, boolean generateText) throws IOException {
+                              String description, boolean generateText, boolean generateCrawlDiagnostics,
+                              boolean generateRobotsTxt) throws IOException {
 
 
         FileSystem fs = outputPath.getFileSystem(context.getConfiguration());
@@ -135,6 +146,20 @@ public class WarcExport extends Configured implements Tool {
           textWarcOut = fs.create(new Path(new Path(outputPath, "text"), textFilename));
           textWarcWriter = new WarcWriter(textWarcOut);
           textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename, hostname, publisher, operator, software, isPartOf, description);
+        }
+
+        this.generateCrawlDiagnostics = generateCrawlDiagnostics;
+        if (generateCrawlDiagnostics) {
+          crawlDiagnosticsWarcOut = fs.create(new Path(new Path(outputPath, "crawldiagnostics"), filename));
+          crawlDiagnosticsWarcWriter = new WarcWriter(crawlDiagnosticsWarcOut);
+          crawlDiagnosticsWarcinfoId = crawlDiagnosticsWarcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
+        }
+
+        this.generateRobotsTxt = generateRobotsTxt;
+        if (generateRobotsTxt) {
+          robotsTxtWarcOut = fs.create(new Path(new Path(outputPath, "robotstxt"), filename));
+          robotsTxtWarcWriter = new WarcWriter(robotsTxtWarcOut);
+          robotsTxtWarcinfoId = robotsTxtWarcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
         }
 
         base32 = new Base32();
@@ -162,41 +187,55 @@ public class WarcExport extends Configured implements Tool {
         }
 
         String ip = "0.0.0.0";
-        Date date;
+        Date date = null;
         boolean notModified = false;
         String verbatimResponseHeaders = null;
         String verbatimRequestHeaders = null;
         String headers = "";
         String statusLine = "";
+        String fetchDuration = null;
         String crawlDelay = null;
 
-        date = new Date(value.datum.getFetchTime());
-
-        // This is for older crawl dbs that don't include the verbatim status line in the metadata
-        ProtocolStatus pstatus = (ProtocolStatus)value.datum.getMetaData().get(Nutch.WRITABLE_PROTO_STATUS_KEY);
-        if (pstatus == null) {
-          return;
-        } else {
-          switch (pstatus.getCode()) {
-            case ProtocolStatus.SUCCESS:
-              statusLine = "HTTP/1.0 200 OK";
-              break;
-            case ProtocolStatus.TEMP_MOVED:
-              statusLine = "HTTP/1.0 302 Found";
-              break;
-            case ProtocolStatus.MOVED:
-              statusLine = "HTTP/1.0 301 Moved Permanently";
-              break;
-            case ProtocolStatus.NOTMODIFIED:
-              statusLine = "HTTP/1.0 304 Not Modified";
-              notModified = true;
-              break;
-            default:
-              if (value.content.getMetadata().get(Nutch.FETCH_RESPONSE_VERBATIM_STATUS_KEY) == null) {
-                LOG.info("Unknown or ambiguous protocol status");
-                return;
-              }
+        if (value.datum != null) {
+          date = new Date(value.datum.getFetchTime());
+          // This is for older crawl dbs that don't include the verbatim status line in the metadata
+          ProtocolStatus pstatus = (ProtocolStatus)value.datum.getMetaData().get(Nutch.WRITABLE_PROTO_STATUS_KEY);
+          if (pstatus == null) {
+            return;
+          } else {
+            switch (pstatus.getCode()) {
+              case ProtocolStatus.SUCCESS:
+                statusLine = "HTTP/1.0 200 OK";
+                break;
+              case ProtocolStatus.TEMP_MOVED:
+                statusLine = "HTTP/1.0 302 Found";
+                break;
+              case ProtocolStatus.MOVED:
+                statusLine = "HTTP/1.0 301 Moved Permanently";
+                break;
+              case ProtocolStatus.NOTMODIFIED:
+                statusLine = "HTTP/1.0 304 Not Modified";
+                notModified = true;
+                break;
+              default:
+                if (value.content.getMetadata().get(Nutch.FETCH_RESPONSE_VERBATIM_STATUS_KEY) == null) {
+                  LOG.info("Unknown or ambiguous protocol status");
+                  return;
+                }
+            }
           }
+          fetchDuration = value.datum.getMetaData().get(Nutch.WRITABLE_FETCH_DURATION_KEY).toString();
+          if (value.datum.getMetaData().get(Nutch.WRITABLE_CRAWL_DELAY_KEY) != null) {
+            crawlDelay = value.datum.getMetaData().get(Nutch.WRITABLE_CRAWL_DELAY_KEY).toString();
+          }
+        } else {
+          // robots.txt, no CrawlDatum available
+          try {
+            date = HttpDateFormat.toDate(value.content.getMetadata().get("Date"));
+          } catch (ParseException e) {
+            date = new Date();
+          }
+          // status is taken from header
         }
 
         boolean useVerbatimResponseHeaders = false;
@@ -241,12 +280,6 @@ public class WarcExport extends Configured implements Tool {
           }
         }
 
-        String fetchDuration = value.datum.getMetaData().get(Nutch.WRITABLE_FETCH_DURATION_KEY).toString();
-        if (value.datum.getMetaData().get(Nutch.WRITABLE_CRAWL_DELAY_KEY) != null) {
-          crawlDelay = value.datum.getMetaData().get(Nutch.WRITABLE_CRAWL_DELAY_KEY).toString();
-        }
-
-
         if (verbatimRequestHeaders == null) {
           LOG.info("No request headers!");
           return;
@@ -256,12 +289,23 @@ public class WarcExport extends Configured implements Tool {
           headers = verbatimResponseHeaders;
         }
 
-        URI requestId = warcWriter.writeWarcRequestRecord(targetUri, ip, date, warcinfoId,
+        WarcWriter writer = warcWriter;
+        URI infoId = this.warcinfoId;
+        if (value.datum == null) {
+          // no CrawlDatum: must be a robots.txt
+          writer = robotsTxtWarcWriter;
+          infoId = robotsTxtWarcinfoId;
+        } else if (value.datum.getStatus() != CrawlDatum.STATUS_FETCH_SUCCESS) {
+          writer = crawlDiagnosticsWarcWriter;
+          infoId = crawlDiagnosticsWarcinfoId;
+        }
+
+        URI requestId = writer.writeWarcRequestRecord(targetUri, ip, date, infoId,
             verbatimRequestHeaders.getBytes("utf-8"));
 
         if (notModified) {
           /*
-          warcWriter.writeWarcRevisitRecord(targetUri, ip, date, warcinfoId, requestId,
+          writer.writeWarcRevisitRecord(targetUri, ip, date, infoId, requestId,
               WarcWriter.PROFILE_REVISIT_NOT_MODIFIED, payloadDigest, abbreviatedResponse, abbreviatedResponseLength);
               */
         } else {
@@ -275,7 +319,7 @@ public class WarcExport extends Configured implements Tool {
           System.arraycopy(value.content.getContent(), 0, responseBytes, responseHeaderBytes.length,
               value.content.getContent().length);
 
-          URI responseId = warcWriter.writeWarcResponseRecord(targetUri, ip, date, warcinfoId, requestId,
+          URI responseId = writer.writeWarcResponseRecord(targetUri, ip, date, infoId, requestId,
               getSha1DigestWithAlg(value.content.getContent()), getSha1DigestWithAlg(responseBytes), truncatedReason,
               responseBytes);
 
@@ -292,13 +336,16 @@ public class WarcExport extends Configured implements Tool {
             metadata.put("robotsCrawlDelay", crawlDelay);
           }
 
-          for (Map.Entry<String, String> entry : metadata.entrySet()) {
-            metadatasb.append(entry.getKey()).append(COLONSP).append(entry.getValue()).append(CRLF);
-          }
-          metadatasb.append(CRLF);
+          if (metadata.size() > 0) {
+            for (Map.Entry<String, String> entry : metadata.entrySet()) {
+              metadatasb.append(entry.getKey()).append(COLONSP)
+                  .append(entry.getValue()).append(CRLF);
+            }
+            metadatasb.append(CRLF);
 
-          warcWriter.writeWarcMetadataRecord(targetUri, date, warcinfoId, responseId, null,
-              metadatasb.toString().getBytes("utf-8"));
+            writer.writeWarcMetadataRecord(targetUri, date, infoId,
+                responseId, null, metadatasb.toString().getBytes("utf-8"));
+          }
 
           // Write text extract
           if (generateText && value.parseText != null) {
@@ -318,6 +365,12 @@ public class WarcExport extends Configured implements Tool {
         warcOut.close();
         if (generateText) {
           textWarcOut.close();
+        }
+        if (generateCrawlDiagnostics) {
+          crawlDiagnosticsWarcOut.close();
+        }
+        if (generateRobotsTxt) {
+          robotsTxtWarcOut.close();
         }
       }
     }
@@ -348,7 +401,8 @@ public class WarcExport extends Configured implements Tool {
       String isPartOf = conf.get("warc.export.isPartOf", null);
       String description = conf.get("warc.export.description", null);
       boolean generateText = conf.getBoolean("warc.export.text", true);
-
+      boolean generateCrawlDiagnostics = conf.getBoolean("warc.export.crawldiagnostics", false);
+      boolean generateRobotsTxt = conf.getBoolean("warc.export.robotstxt", false);
 
       // WARC recommends - Prefix-Timestamp-Serial-Crawlhost.warc.gz
       String filename = prefix + "-" + prefixDate + "-" + numberFormat.format(partition) + "-" +
@@ -360,7 +414,7 @@ public class WarcExport extends Configured implements Tool {
       Path outputPath = getOutputPath(context);
 
       return new WarcRecordWriter(context, outputPath, filename, textFilename, hostname, publisher, operator, software,
-          isPartOf, description, generateText);
+          isPartOf, description, generateText, generateCrawlDiagnostics, generateRobotsTxt);
     }
 
     @Override
@@ -404,6 +458,16 @@ public class WarcExport extends Configured implements Tool {
 
 
   public static class ExportReduce extends Reducer<Text, CompressedNutchWritable, Text, CompleteData> {
+
+    private boolean generateCrawlDiagnostics = false;
+    private boolean generateRobotsTxt = false;
+
+    public void setup(Context context) {
+      Configuration conf = context.getConfiguration();
+      generateCrawlDiagnostics = conf.getBoolean("warc.export.crawldiagnostics", false);
+      generateRobotsTxt = conf.getBoolean("warc.export.robotstxt", false);
+    }
+
     public void reduce(Text key, Iterable<CompressedNutchWritable> values, Context context) throws IOException, InterruptedException {
       CrawlDatum datum = null;
       Content content = null;
@@ -429,12 +493,16 @@ public class WarcExport extends Configured implements Tool {
         }
       }
 
-      if (datum == null || content == null) {
+      if (content == null) {
         return;
       }
 
-      if (datum.getStatus() != CrawlDatum.STATUS_FETCH_SUCCESS) {
-        return;
+      if (datum == null) {
+        if (!generateRobotsTxt)
+          return;
+      } else if (datum.getStatus() != CrawlDatum.STATUS_FETCH_SUCCESS) {
+        if (!generateCrawlDiagnostics)
+          return;
       }
 
       CompleteData completeData = new CompleteData(key, datum, content, parseText);
@@ -450,9 +518,6 @@ public class WarcExport extends Configured implements Tool {
   }
 
   public static class CrawlDatumCombinedInputFormat extends CombineSequenceFileInputFormat<Text, CrawlDatum> {
-  }
-
-  public static class ContentCombinedInputFormat extends CombineSequenceFileInputFormat<Text, Content> {
   }
 
   public String getHostname() {
@@ -474,8 +539,8 @@ public class WarcExport extends Configured implements Tool {
     return "localhost";
   }
 
-  public void export(Path outputDir, List<Path> segments,
-                     boolean generateText) throws IOException {
+  public void export(Path outputDir, List<Path> segments, boolean generateText,
+      boolean generateCrawlDiagnostics, boolean generateRobotsTxt) throws IOException {
     Configuration conf = getConf();
 
     // We compress ourselves, so this isn't necessary
@@ -483,7 +548,8 @@ public class WarcExport extends Configured implements Tool {
     conf.set("warc.export.hostname", getHostname());
 
     conf.setBoolean("warc.export.text", generateText);
-
+    conf.setBoolean("warc.export.crawldiagnostics", generateCrawlDiagnostics);
+    conf.setBoolean("warc.export.robotstxt", generateRobotsTxt);
 
     Job job = Job.getInstance(conf);
     job.setJobName("WarcExport: " + outputDir.toString());
@@ -541,10 +607,13 @@ public class WarcExport extends Configured implements Tool {
   }
 
 
+  public static class ContentCombinedInputFormat extends CombineSequenceFileInputFormat<Text, Content> {
+  }
+
   public int run(String[] args) throws Exception {
     if (args.length < 2) {
       System.err
-          .println("Usage: WarcExport <outputdir> (<segment> ... | -dir <segments>) [-notext]");
+          .println("Usage: WarcExport <outputdir> (<segment> ... | -dir <segments>) [-notext] [-crawldiagnostics] [-robotstxt]");
       return -1;
     }
 
@@ -552,6 +621,8 @@ public class WarcExport extends Configured implements Tool {
 
     final List<Path> segments = new ArrayList<Path>();
     boolean generateText = true;
+    boolean generateCrawlDiagnostics = false;
+    boolean generateRobotsTxt = false;
 
     for (int i = 1; i < args.length; i++) {
       if (args[i].equals("-dir")) {
@@ -565,13 +636,17 @@ public class WarcExport extends Configured implements Tool {
         }
       } else if (args[i].equals("-notext")) {
         generateText = false;
+      } else if (args[i].equals("-crawldiagnostics")) {
+        generateCrawlDiagnostics = true;
+      } else if (args[i].equals("-robotstxt")) {
+        generateRobotsTxt = true;
       } else {
         segments.add(new Path(args[i]));
       }
     }
 
     try {
-      export(outputDir, segments, generateText);
+      export(outputDir, segments, generateText, generateCrawlDiagnostics, generateRobotsTxt);
       return 0;
     } catch (final Exception e) {
       LOG.error("Exporter: " + StringUtils.stringifyException(e));

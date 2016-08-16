@@ -18,6 +18,7 @@
 package org.apache.nutch.protocol.http.api;
 
 import java.net.URL;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.nutch.net.protocols.Response;
+import org.apache.nutch.protocol.Content;
 import org.apache.nutch.protocol.Protocol;
 import org.apache.nutch.protocol.RobotRulesParser;
 
@@ -49,17 +51,27 @@ public class HttpRobotRulesParser extends RobotRulesParser {
   }
 
   /**
-   * The hosts for which the caching of robots rules is yet to be done,
-   * it sends a Http request to the host corresponding to the {@link URL} 
-   * passed, gets robots file, parses the rules and caches the rules object
-   * to avoid re-work in future.
+   * Get the rules from robots.txt which applies for the given {@code url}.
+   * Robot rules are cached for a unique combination of host, protocol, and
+   * port. If no rules are found in the cache, a HTTP request is send to fetch
+   * {{protocol://host:port/robots.txt}}. The robots.txt is then parsed and the
+   * rules are cached to avoid re-fetching and re-parsing it again.
    * 
-   *  @param http The {@link Protocol} object
-   *  @param url URL 
-   *  
-   *  @return robotRules A {@link BaseRobotRules} object for the rules
+   * @param http
+   *          The {@link Protocol} object
+   * @param url
+   *          URL
+   * @param robotsTxtContent
+   *          container to store responses when fetching the robots.txt file for
+   *          debugging or archival purposes. Instead of a robots.txt file, it
+   *          may include redirects or an error page (404, etc.). Response
+   *          {@link Content} is appended to the passed list. If null is passed
+   *          nothing is stored.
+   *
+   * @return robotRules A {@link BaseRobotRules} object for the rules
    */
-  public BaseRobotRules getRobotRulesSet(Protocol http, URL url) {
+  public BaseRobotRules getRobotRulesSet(Protocol http, URL url,
+      List<Content> robotsTxtContent) {
 
     String protocol = url.getProtocol().toLowerCase();  // normalize to lower case
     String host = url.getHost().toLowerCase();          // normalize to lower case
@@ -72,8 +84,12 @@ public class HttpRobotRulesParser extends RobotRulesParser {
       URL redir = null;
       if (LOG.isTraceEnabled()) { LOG.trace("cache miss " + url); }
       try {
-        Response response = ((HttpBase)http).getResponse(new URL(url, "/robots.txt"),
-                                             new CrawlDatum(), true);
+        URL robotsUrl = new URL(url, "/robots.txt");
+        Response response = ((HttpBase) http).getResponse(robotsUrl,
+            new CrawlDatum(), true);
+        if (robotsTxtContent != null) {
+          addRobotsContent(robotsTxtContent, robotsUrl, response);
+        }
         // try one level of redirection ?
         if (response.getCode() == 301 || response.getCode() == 302) {
           String redirection = response.getHeader("Location");
@@ -90,6 +106,9 @@ public class HttpRobotRulesParser extends RobotRulesParser {
             }
             
             response = ((HttpBase)http).getResponse(redir, new CrawlDatum(), true);
+            if (robotsTxtContent != null) {
+              addRobotsContent(robotsTxtContent, robotsUrl, response);
+            }
           }
         }
 
@@ -122,5 +141,17 @@ public class HttpRobotRulesParser extends RobotRulesParser {
       }
     }
     return robotRules;
+  }
+
+  private void addRobotsContent(List<Content> robotsTxtContent,
+      URL robotsUrl, Response robotsResponse) {
+    byte[] robotsBytes = robotsResponse.getContent();
+    if (robotsBytes == null)
+      robotsBytes = new byte[0];
+    Content content = new Content(robotsUrl.toString(),
+        robotsUrl.toString(), robotsBytes,
+        robotsResponse.getHeader("Content-Type"), robotsResponse.getHeaders(),
+        getConf());
+    robotsTxtContent.add(content);
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.nutch.protocol.file;
 
 import java.net.URL;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -181,8 +182,11 @@ public class File implements Protocol {
    * No robots parsing is done for file protocol. 
    * So this returns a set of empty rules which will allow every url.
    */
-  public BaseRobotRules getRobotRules(Text url, CrawlDatum datum) {
+  @Override
+  public BaseRobotRules getRobotRules(Text url, CrawlDatum datum,
+      List<Content> robotsTxtContent) {
     return RobotRulesParser.EMPTY_RULES;
   }
+
 }
 

@@ -849,6 +849,14 @@
   </description>
 </property>
 
+<property>
+  <name>fetcher.store.robotstxt</name>
+  <value>false</value>
+  <description>If true, fetcher will store the robots.txt response
+  content and status for debugging or archival purposes.
+  </description>
+</property>
+
 <!-- moreindexingfilter plugin properties -->
 
 <property>

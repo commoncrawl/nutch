@@ -640,6 +640,8 @@ public class Fetcher extends Configured implements Tool,
     private int outlinksDepthDivisor;
     private boolean skipTruncated;
 
+    private List<Content> robotsTxtContent = null;
+
     public FetcherThread(Configuration conf) {
       this.setDaemon(true);                       // don't hang JVM on exit
       this.setName("FetcherThread");              // use an informative name
@@ -671,6 +673,10 @@ public class Fetcher extends Configured implements Tool,
       outlinksIgnoreExternal = conf.getBoolean("fetcher.follow.outlinks.ignore.external", false);
       maxOutlinkDepthNumLinks = conf.getInt("fetcher.follow.outlinks.num.links", 4);
       outlinksDepthDivisor = conf.getInt("fetcher.follow.outlinks.depth.divisor", 2);
+
+      if (conf.getBoolean("fetcher.store.robotstxt", false)) {
+        robotsTxtContent = new LinkedList<Content>();
+      }
     }
 
     public void run() {
@@ -732,7 +738,16 @@ public class Fetcher extends Configured implements Tool,
                 output(fit.url, fit.datum, null, ProtocolStatus.STATUS_ROBOTS_DENIED, CrawlDatum.STATUS_FETCH_GONE);
                 continue;
               }
-              BaseRobotRules rules = protocol.getRobotRules(fit.url, fit.datum);
+              BaseRobotRules rules = protocol.getRobotRules(fit.url, fit.datum, robotsTxtContent);
+              if (robotsTxtContent != null) {
+                for (Content robotsTxt : robotsTxtContent) {
+                  LOG.debug("fetched and stored robots.txt {}",
+                      robotsTxt.getUrl());
+                  output.collect(new Text(robotsTxt.getUrl()),
+                      new NutchWritable(robotsTxt));
+                }
+                robotsTxtContent.clear();
+              }
               if (!rules.isAllowed(fit.u.toString())) {
                 // unblock
                 fetchQueues.finishFetchItem(fit, true, false);

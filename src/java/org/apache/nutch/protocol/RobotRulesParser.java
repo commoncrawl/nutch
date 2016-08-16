@@ -24,6 +24,7 @@ import java.io.LineNumberReader;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.StringTokenizer;
 
 // Commons Logging imports
@@ -147,17 +148,55 @@ public abstract class RobotRulesParser implements Configurable {
     return robotParser.parseContent(url, content, contentType, robotName); 
   }
 
-  public BaseRobotRules getRobotRulesSet(Protocol protocol, Text url) {
+  /**
+   * Fetch robots.txt (or it's protocol-specific equivalent) which applies to
+   * the given URL, parse it and return the set of robot rules applicable for
+   * the configured agent name(s).
+   *
+   * @param protocol
+   *          {@link Protocol}
+   * @param url
+   *          URL to check
+   * @param robotsTxtContent
+   *          container to store responses when fetching the robots.txt file for
+   *          debugging or archival purposes. Instead of a robots.txt file, it
+   *          may include redirects or an error page (404, etc.). Response
+   *          {@link Content} is appended to the passed list. If null is passed
+   *          nothing is stored.
+   *
+   * @return robot rules (specific for this URL or default), never null
+   */
+  public BaseRobotRules getRobotRulesSet(Protocol protocol, Text url,
+      List<Content> robotsTxtContent) {
     URL u = null;
     try {
       u = new URL(url.toString());
     } catch (Exception e) {
       return EMPTY_RULES;
     }
-    return getRobotRulesSet(protocol, u);
+    return getRobotRulesSet(protocol, u, robotsTxtContent);
   }
 
-  public abstract BaseRobotRules getRobotRulesSet(Protocol protocol, URL url);
+  /**
+   * Fetch robots.txt (or it's protocol-specific equivalent) which applies to
+   * the given URL, parse it and return the set of robot rules applicable for
+   * the configured agent name(s).
+   *
+   * @param protocol
+   *          {@link Protocol}
+   * @param url
+   *          URL to check
+   * @param robotsTxtContent
+   *          container to store responses when fetching the robots.txt file for
+   *          debugging or archival purposes. Instead of a robots.txt file, it
+   *          may include redirects or an error page (404, etc.). Response
+   *          {@link Content} is appended to the passed list. If null is passed
+   *          nothing is stored.
+   *
+   * @return robot rules (specific for this URL or default), never null
+   */
+  public abstract BaseRobotRules getRobotRulesSet(Protocol protocol, URL url,
+      List<Content> robotsTxtContent);
 
   /** command-line main for testing */
   public static void main(String[] argv) {

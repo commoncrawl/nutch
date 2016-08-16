@@ -37,7 +37,7 @@ import org.apache.nutch.protocol.ProtocolStatus;
 import crawlercommons.robots.BaseRobotRules;
 
 import java.net.URL;
-
+import java.util.List;
 import java.io.IOException;
 
 /**
@@ -254,7 +254,9 @@ public class Ftp implements Protocol {
    * and this returns a set of empty rules which will allow every url.
    * There a jira logged for the same NUTCH-1513
    */
-  public BaseRobotRules getRobotRules(Text url, CrawlDatum datum) {
+  @Override
+  public BaseRobotRules getRobotRules(Text url, CrawlDatum datum,
+      List<Content> robotsTxtContent) {
     return RobotRulesParser.EMPTY_RULES;
   }
 }

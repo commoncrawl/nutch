@@ -19,6 +19,7 @@ package org.apache.nutch.protocol.http.api;
 // JDK imports
 import java.io.IOException;
 import java.net.URL;
+import java.util.List;
 
 // Logging imports
 import org.slf4j.Logger;
@@ -403,8 +404,9 @@ public abstract class HttpBase implements Protocol {
                                           boolean followRedirects)
     throws ProtocolException, IOException;
 
-  public BaseRobotRules getRobotRules(Text url, CrawlDatum datum) {
-    return robots.getRobotRulesSet(this, url);
+  public BaseRobotRules getRobotRules(Text url, CrawlDatum datum,
+      List<Content> robotsTxtContent) {
+    return robots.getRobotRulesSet(this, url, robotsTxtContent);
   }
 }
 
