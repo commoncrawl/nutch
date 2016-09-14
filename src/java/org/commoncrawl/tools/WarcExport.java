@@ -224,15 +224,24 @@ public class WarcExport extends Configured implements Tool {
                 }
             }
           }
-          fetchDuration = value.datum.getMetaData().get(Nutch.WRITABLE_FETCH_DURATION_KEY).toString();
+          if (value.datum.getMetaData().get(Nutch.WRITABLE_FETCH_DURATION_KEY) != null) {
+            fetchDuration = value.datum.getMetaData().get(Nutch.WRITABLE_FETCH_DURATION_KEY).toString();
+          }
           if (value.datum.getMetaData().get(Nutch.WRITABLE_CRAWL_DELAY_KEY) != null) {
             crawlDelay = value.datum.getMetaData().get(Nutch.WRITABLE_CRAWL_DELAY_KEY).toString();
           }
         } else {
           // robots.txt, no CrawlDatum available
-          try {
-            date = HttpDateFormat.toDate(value.content.getMetadata().get("Date"));
-          } catch (ParseException e) {
+          String httpDate = value.content.getMetadata().get("Date");
+          if (httpDate != null) {
+            try {
+              date = HttpDateFormat.toDate(httpDate);
+            } catch (ParseException e) {
+              LOG.warn("Failed to parse HTTP Date {} for {}", httpDate, targetUri);
+              date = new Date();
+            }
+          } else {
+            LOG.warn("No HTTP Date for {}", targetUri);
             date = new Date();
           }
           // status is taken from header
