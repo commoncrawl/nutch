@@ -62,14 +62,14 @@ public class Injector extends Configured implements Tool {
   public static String nutchFixedFetchIntervalMDName = "nutch.fetchInterval.fixed";
 
   /** Normalize and filter injected urls. */
-  public static class InjectMapper implements Mapper<WritableComparable, Text, Text, CrawlDatum> {
-    private URLNormalizers urlNormalizers;
-    private int interval;
-    private float scoreInjected;
-    private JobConf jobConf;
-    private URLFilters filters;
-    private ScoringFilters scfilters;
-    private long curTime;
+  public static class InjectMapper implements Mapper<WritableComparable<?>, Text, Text, CrawlDatum> {
+    protected URLNormalizers urlNormalizers;
+    protected int interval;
+    protected float scoreInjected;
+    protected JobConf jobConf;
+    protected URLFilters filters;
+    protected ScoringFilters scfilters;
+    protected long curTime;
 
     public void configure(JobConf job) {
       this.jobConf = job;
@@ -83,7 +83,7 @@ public class Injector extends Configured implements Tool {
 
     public void close() {}
 
-    public void map(WritableComparable key, Text value,
+    public void map(WritableComparable<?> key, Text value,
                     OutputCollector<Text, CrawlDatum> output, Reporter reporter)
       throws IOException {
       String url = value.toString();              // value is line of text
@@ -254,8 +254,11 @@ public class Injector extends Configured implements Tool {
       // Old default behaviour
       if (injectedSet && !oldSet) {
         res = injected;
+        reporter.getCounter("injector", "new_urls_injected").increment(1);
       } else {
         res = old;
+        if (injectedSet)
+          reporter.getCounter("injector", "urls_merged").increment(1);
       }
 
       output.collect(key, res);
