@@ -220,21 +220,25 @@ public class DedupRedirectsJob extends DeduplicationJob {
         // (a) it is not a redirect
         output.collect(key, existingDoc);
       } else {
-        // (b) it is not the value passed to the reducer under original URL key
         Text origURL = (Text) existingDoc.getMetaData().remove(urlKey);
         if (origURL != null) {
+          // (b) it is the value passed to the reducer under the target URL and
+          //     not under the original URL key. It's a redirect and not a
+          //     duplicate!
           unsetDuplicateStatus(existingDoc);
-          output.collect(key, existingDoc);
+          output.collect(origURL, existingDoc);
           reporter.incrCounter("DeduplicationJobStatus",
               "Redirects kept as non-duplicates", 1);
         } else {
           // (c) it is a self-referential redirect
           String targetURL = getTargetURL(existingDoc);
           if (key.toString().equals(targetURL)) {
+            output.collect(key, existingDoc);
             reporter.incrCounter("DeduplicationJobStatus",
                 "Self-referential redirects kept as non-duplicates", 1);            
           }
-          // else: ignore redirects emitted under original URL
+          // else: ignore redirects emitted under original URL because they are
+          // collected under the target URL
         }
       }
     }
