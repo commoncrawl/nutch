@@ -639,6 +639,7 @@ public class Fetcher extends Configured implements Tool,
 
     private int outlinksDepthDivisor;
     private boolean skipTruncated;
+    private boolean signatureWithoutParsing;
 
     private List<Content> robotsTxtContent = null;
 
@@ -650,6 +651,7 @@ public class Fetcher extends Configured implements Tool,
       this.scfilters = new ScoringFilters(conf);
       this.parseUtil = new ParseUtil(conf);
       this.skipTruncated = conf.getBoolean(ParseSegment.SKIP_TRUNCATED, true);
+      this.signatureWithoutParsing = conf.getBoolean("fetcher.signature", false);
       this.protocolFactory = new ProtocolFactory(conf);
       this.normalizers = new URLNormalizers(conf, URLNormalizers.SCOPE_FETCHER);
       this.maxCrawlDelay = conf.getInt("fetcher.max.crawl.delay", 30) * 1000;
@@ -1044,21 +1046,20 @@ public class Fetcher extends Configured implements Tool,
             LOG.warn("Couldn't pass score, url " + key + " (" + e + ")");
           }
         }
-        /* Note: Fetcher will only follow meta-redirects coming from the
-         * original URL. */
-        if (parsing && status == CrawlDatum.STATUS_FETCH_SUCCESS) {
-          if (!skipTruncated || (skipTruncated && !ParseSegment.isTruncated(content))) {
+        if (status == CrawlDatum.STATUS_FETCH_SUCCESS) {
+          if (parsing
+              && !(skipTruncated && ParseSegment.isTruncated(content))) {
             try {
               parseResult = this.parseUtil.parse(content);
             } catch (Exception e) {
-              LOG.warn("Error parsing: " + key + ": " + StringUtils.stringifyException(e));
+              LOG.warn("Error parsing: " + key + ": "
+                  + StringUtils.stringifyException(e));
             }
           }
-  
-          if (parseResult == null) {
-            byte[] signature =
-              SignatureFactory.getSignature(getConf()).calculate(content,
-                  new ParseStatus().getEmptyParse(conf));
+
+          if (parseResult == null && (parsing || signatureWithoutParsing)) {
+            byte[] signature = SignatureFactory.getSignature(getConf())
+                .calculate(content, new ParseStatus().getEmptyParse(conf));
             datum.setSignature(signature);
           }
         }
