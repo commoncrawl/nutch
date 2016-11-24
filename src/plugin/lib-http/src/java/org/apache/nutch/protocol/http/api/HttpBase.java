@@ -126,7 +126,7 @@ public abstract class HttpBase implements Protocol {
       this.maxContent = conf.getInt("http.content.limit", 64 * 1024);
       this.userAgent = getAgentString(conf.get("http.agent.name"), conf.get("http.agent.version"), conf
               .get("http.agent.description"), conf.get("http.agent.url"), conf.get("http.agent.email"));
-      this.acceptLanguage = conf.get("http.accept.language", acceptLanguage);
+      this.acceptLanguage = conf.get("http.accept.language", acceptLanguage).trim();
       this.accept = conf.get("http.accept", accept);
       // backward-compatible default setting
       this.useHttp11 = conf.getBoolean("http.useHttp11", false);

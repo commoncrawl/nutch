@@ -162,9 +162,12 @@ public class HttpResponse implements Response {
         reqStr.append("\r\n");
       }
 
-      reqStr.append("Accept-Language: ");
-      reqStr.append(this.http.getAcceptLanguage());
-      reqStr.append("\r\n");
+      String acceptLanguage = this.http.getAcceptLanguage();
+      if (!acceptLanguage.isEmpty()) {
+        reqStr.append("Accept-Language: ");
+        reqStr.append(acceptLanguage);
+        reqStr.append("\r\n");
+      }
 
       reqStr.append("Accept: ");
       reqStr.append(this.http.getAccept());
