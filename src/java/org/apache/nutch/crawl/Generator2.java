@@ -83,6 +83,7 @@ public class Generator2 extends Configured implements Tool {
   public static final String GENERATOR_CUR_TIME = "generate.curTime";
   public static final String GENERATOR_DELAY = "crawl.gen.delay";
   public static final String GENERATOR_MAX_NUM_SEGMENTS = "generate.max.num.segments";
+  public static final String GENERATOR_COUNT_KEEP_MIN_IN_SEGMENT = "generate.count.keep.min.urls.per.segment";
 
   protected static Random random = new Random();
 
@@ -244,6 +245,8 @@ public class Generator2 extends Configured implements Tool {
     private DomainScorePair outputKey = new DomainScorePair();
     private MurmurHash hasher = new MurmurHash();
     private int seed;
+    private int currentSegment;
+    private int keepMinUrlsPerSegment;
 
     public void configure(JobConf job) {
       curTime = job.getLong(GENERATOR_CUR_TIME, System.currentTimeMillis());
@@ -269,7 +272,9 @@ public class Generator2 extends Configured implements Tool {
       intervalThreshold = job.getInt(GENERATOR_MIN_INTERVAL, -1);
       restrictStatus = job.get(GENERATOR_RESTRICT_STATUS, null);
       maxNumSegments = job.getInt(GENERATOR_MAX_NUM_SEGMENTS, 1);
+      keepMinUrlsPerSegment  = job.getInt(GENERATOR_COUNT_KEEP_MIN_IN_SEGMENT, 100);
       seed = job.getInt("partition.url.seed", 0);
+      currentSegment = 1;
     }
 
     public void close() {}
@@ -361,67 +366,77 @@ public class Generator2 extends Configured implements Tool {
       output.collect(outputKey, entry);
     }
 
-    /** Partition by host / domain, use murmurhash because of poor hashCode distribution */
+    /**
+     * Partition by host / domain, use murmurhash because of poor hashCode
+     * distribution
+     */
     public int getPartition(DomainScorePair key, Writable value, int numReduceTasks) {
       byte[] domain = key.getDomain().getBytes();
       return (hasher.hash(domain, domain.length, seed) & Integer.MAX_VALUE) % numReduceTasks;
     }
 
-    /* This just limits by host/domain. We leave limiting/selecting segments to the next step because
-     * of the unequal distribution of domains in a crawldb. Why doesn't hadoop let me know how many values
-     * I can expect and the total number outputted by the mapper since it should know it at sort?
+    private int nextSegment() {
+      if (++currentSegment > maxNumSegments) {
+        currentSegment = 1;
+      }
+      return currentSegment;
+    }
+
+    /*
+     * Limit the number of URLs per host/domain and assign segment number to
+     * every record.
      */
     public void reduce(DomainScorePair key, Iterator<SelectorEntry> values,
                        OutputCollector<FloatWritable, SelectorEntry> output, Reporter reporter)
         throws IOException {
 
       int hostCount = 0;
+      int segment = nextSegment();
 
       while (values.hasNext()) {
         SelectorEntry entry = values.next();
 
         hostCount++;
+
         if (maxCount > 0 && hostCount >= maxCount * maxNumSegments) {
-          if (hostCount == maxCount * maxNumSegments && LOG.isInfoEnabled()) {
-            LOG.info("Host or domain " + key.getDomain() + " has more than " + maxCount * maxNumSegments
-                + " URLs for all " + maxNumSegments + " segments. Additional URLs won't be included in the fetchlist.");
-          }
+          LOG.info(
+              "Host or domain {} has more than {} URLs for all {} segments. Additional URLs won't be included in the fetchlist.",
+              key.getDomain(), (maxCount * maxNumSegments), maxNumSegments);
           reporter.getCounter("Generator", "SKIPPED_DOMAINS_OVERFLOW").increment(1);
           return;
         }
         reporter.getCounter("Selected by status",
             CrawlDatum.getStatusName(entry.datum.getStatus())).increment(1);
+
+        entry.segnum.set(segment);
+        if ((hostCount % keepMinUrlsPerSegment) == 0) {
+          segment = nextSegment();
+        }
+
         output.collect(key.getScore(), entry);
       }
     }
   }
 
-  /* This takes the filtered records from the Selector job and assigns each record
-   * a segment number then limits the number of records per segment in the reducer and saves
-   * each segment to its own file.
+  /*
+   * This takes the filtered records from the Selector job, limits the number
+   * of records per segment in the reducer and saves each segment to its own
+   * file.
    */
   public static class Segmenter implements
       Mapper<FloatWritable, SelectorEntry, IntWritable, SelectorEntry>,
       Reducer<IntWritable, SelectorEntry, Text, SelectorEntry> {
-    private int lastSegment = 0;
-    private int maxNumSegments;
     private long maxPerSegment;
 
     public void close() {}
 
     public void configure(JobConf job) {
-      maxNumSegments = job.getInt(GENERATOR_MAX_NUM_SEGMENTS, 1);
       maxPerSegment = job.getLong(GENERATOR_TOP_N, Long.MAX_VALUE);
     }
 
     public void map(FloatWritable key, SelectorEntry value,
                     OutputCollector<IntWritable, SelectorEntry> output, Reporter reporter)
         throws IOException {
-
-      if (++lastSegment > maxNumSegments) {
-        lastSegment = 1;
-      }
-      value.segnum.set(lastSegment);
 
       output.collect(value.segnum, value);
     }
@@ -432,11 +447,17 @@ public class Generator2 extends Configured implements Tool {
       long count = 0;
       while (values.hasNext()) {
         SelectorEntry entry = values.next();
-        if (++count > maxPerSegment) {
+        if (count < maxPerSegment) {
+          output.collect(entry.url, entry);
+        } else {
           reporter.getCounter("Generator", "SKIPPED_RECORDS_SEGMENT_OVERFLOW").increment(1);
-          continue;
+          if (count == maxPerSegment) {
+            LOG.info(
+                "Maximum number of URLs per segment reached for segment {}, skipping remaining URLs",
+                key.get());
+          }
         }
-        output.collect(entry.url, entry);
+        count++;
       }
     }
   }

@@ -648,6 +648,17 @@
   generate.min.interval. A value of -1 disables this check.</description>
 </property>
 
+<property>
+  <name>generate.count.keep.min.urls.per.segment</name>
+  <value>100</value>
+  <description>When multiple segments are generated, defines the min. number of URLs
+  per host/domain/ip to be kept in a single segment. There is a trade-off between
+  distributing the URLs of one host over many segments and keeping groups of URLs
+  from the same host/domain/ip together. The latter will shorten the delays between
+  successive requests but has the advantage that the robots.txt is fetched less often.
+  </description>
+</property>
+
 <!-- urlpartitioner properties -->
 
 <property>
