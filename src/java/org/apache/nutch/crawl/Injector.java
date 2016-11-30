@@ -247,8 +247,9 @@ public class Injector extends Configured implements Tool {
       if (injectedSet && oldSet && update && !overwrite) {
         res = old;
         old.putAllMetaData(injected);
-        old.setScore(injected.getScore() != scoreInjected ? injected.getScore() : old.getScore());
-        old.setFetchInterval(injected.getFetchInterval() != interval ? injected.getFetchInterval() : old.getFetchInterval());
+        // smoothly overwrite score and interval
+        old.setScore((injected.getScore() + old.getScore()) / 2.0f);
+        old.setFetchInterval((injected.getFetchInterval() + old.getFetchInterval()) / 2);
       }
       
       // Old default behaviour
