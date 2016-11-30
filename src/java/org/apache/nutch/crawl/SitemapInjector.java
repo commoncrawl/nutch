@@ -456,8 +456,27 @@ public class SitemapInjector extends Injector {
         throws IOException {
 
       Collection<SiteMapURL> sitemapURLs = sitemap.getSiteMapUrls();
-      LOG.info("injecting " + sitemapURLs.size() + " URLs from "
-          + sitemap.getUrl());
+      if (sitemapURLs.size() == 0) {
+        LOG.info("No URLs in sitemap {}", sitemap.getUrl());
+        reporter.getCounter("SitemapInjector", "empty sitemap").increment(1);
+        return;
+      }
+      LOG.info("Found {} URLs in {}", sitemapURLs.size(), sitemap.getUrl());
+
+      // random selection of URLs in case the sitemap contains more than accepted
+      // TODO:
+      //  - for sitemap index: should be done over multiple sub-sitemaps
+      //  - need to consider that URLs may be filtered away
+      //  => use "reservoir sampling" (https://en.wikipedia.org/wiki/Reservoir_sampling)
+      Random random = null;
+      float randomSelect = 0.0f;
+      if (sitemapURLs.size() > (maxUrls - totalUrls.get())) {
+        randomSelect = (maxUrls - totalUrls.get())
+            / (.95f * sitemapURLs.size());
+        if (randomSelect < 1.0f) {
+          random = new Random();
+        }
+      }
 
       for (SiteMapURL siteMapURL : sitemapURLs) {
 
@@ -465,6 +484,13 @@ public class SitemapInjector extends Injector {
           reporter.getCounter("SitemapInjector", "sitemap URL limit reached").increment(1);
           return;
         }
+
+        if (random != null) {
+          if (randomSelect > random.nextFloat()) {
+            continue;
+          }
+        }
+
         totalUrls.incrementAndGet();
 
         // TODO: score and fetch interval should be transparently overridable
