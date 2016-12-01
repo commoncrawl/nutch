@@ -47,6 +47,8 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
 
   public static final String ADAPTIVE_STATUS_SORT_FACTOR_FILE = "db.score.adaptive.sort.by_status.file";
 
+  public static final String ADAPTIVE_FETCH_RETRY_PENALTY = "db.score.adaptive.penalty.fetch_retry";
+
   private Configuration conf;
 
   /**
@@ -58,6 +60,7 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
   private long curTime;
 
   private float adaptiveFetchTimeSort;
+  private float adaptiveFetchRetryPenalty;
 
   private Map<Byte, Float> statusSortMap = new TreeMap<Byte, Float>();
 
@@ -70,6 +73,7 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
     curTime = conf.getLong(Generator.GENERATOR_CUR_TIME,
         System.currentTimeMillis());
     adaptiveFetchTimeSort = conf.getFloat(ADAPTIVE_FETCH_TIME_SORT_FACTOR, .05f);
+    adaptiveFetchRetryPenalty = conf.getFloat(ADAPTIVE_FETCH_RETRY_PENALTY, .1f);
     String adaptiveStatusSortFile = conf.get(ADAPTIVE_STATUS_SORT_FACTOR_FILE, "adaptive-scoring.txt");
     Reader adaptiveStatusSortReader = conf.getConfResourceAsReader(adaptiveStatusSortFile);
     try {
@@ -133,6 +137,10 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
     byte status = datum.getStatus();
     if (statusSortMap.containsKey(status)) {
       initSort += statusSortMap.get(status);
+    }
+    if (datum.getStatus() == CrawlDatum.STATUS_DB_UNFETCHED
+        && datum.getRetriesSinceFetch() > 0) {
+      initSort -= datum.getRetriesSinceFetch() * adaptiveFetchRetryPenalty;
     }
     return initSort;
   }
