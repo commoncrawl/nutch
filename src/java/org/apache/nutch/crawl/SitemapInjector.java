@@ -232,6 +232,8 @@ public class SitemapInjector extends Injector {
       // TODO: should be by real number of outlinks not the maximum allowed
       customScore /= maxUrls;
 
+      long startTime = System.currentTimeMillis();
+
       Content content = getContent(url);
       if (content == null) {
         reporter
@@ -241,7 +243,8 @@ public class SitemapInjector extends Injector {
       }
 
       try {
-        parseProcessSitemap(content, url, output, reporter, maxUrls, customScore);
+        parseProcessSitemap(content, url, output, reporter, startTime, maxUrls,
+            customScore);
       } catch (Exception e) {
         LOG.warn("Failed to process sitemap {}: {}", url,
             StringUtils.stringifyException(e));
@@ -332,7 +335,7 @@ public class SitemapInjector extends Injector {
       AbstractSiteMap sitemap = null;
       try {
         // not a recursive task, should be fast
-        sitemap = task.get(maxSitemapProcessingTime/10, TimeUnit.SECONDS);
+        sitemap = task.get(maxSitemapProcessingTime/20, TimeUnit.SECONDS);
       } finally {
         parse = null;
       }
@@ -345,7 +348,7 @@ public class SitemapInjector extends Injector {
      */
     private void parseProcessSitemap(Content content, String url,
         OutputCollector<Text, CrawlDatum> output, Reporter reporter,
-        long maxUrls, float customScore) {
+        final long startTime, final long maxUrls, final float customScore) {
 
       AbstractSiteMap sitemap = null;
       try {
@@ -361,7 +364,7 @@ public class SitemapInjector extends Injector {
       AtomicLong injectedURLs = new AtomicLong(0);
       try {
         processSitemap(sitemap, output, reporter, injectedURLs, null,
-            maxUrls, customScore);
+            startTime, maxUrls, customScore);
       } catch (IOException e) {
         LOG.warn("failed to process sitemap {}: {}", url,
             StringUtils.stringifyException(e));
@@ -376,8 +379,9 @@ public class SitemapInjector extends Injector {
      */
     public void processSitemap(AbstractSiteMap sitemap,
         OutputCollector<Text, CrawlDatum> output, Reporter reporter,
-        AtomicLong totalUrls, Set<String> processedSitemaps, final long maxUrls,
-        final float customScore) throws IOException {
+        AtomicLong totalUrls, Set<String> processedSitemaps,
+        final long startTime, final long maxUrls, final float customScore)
+        throws IOException {
 
       if (sitemap.isIndex()) {
         SiteMapIndex sitemapIndex = (SiteMapIndex) sitemap;
@@ -387,6 +391,28 @@ public class SitemapInjector extends Injector {
         }
 
         while (sitemapIndex.hasUnprocessedSitemap()) {
+
+          long elapsed = (System.currentTimeMillis()-startTime)/1000;
+          if (elapsed > maxSitemapProcessingTime) {
+            LOG.warn(
+                "Max. processing time reached, skipped remaining sitemaps of sitemap index {}",
+                sitemap.getUrl());
+            reporter.getCounter("SitemapInjector",
+                "sitemap index: time limit reached").increment(1);
+            return;
+          }
+          if ((totalUrls.get() == 0)
+              && (elapsed > (maxSitemapProcessingTime / 2))) {
+            LOG.warn(
+                "Half of processing time elapsed and no URLs injected, skipped remaining sitemaps of sitemap index {}",
+                sitemap.getUrl());
+            reporter
+                .getCounter("SitemapInjector",
+                    "sitemap index: no URLs after 50% of time limit")
+                .increment(1);
+            return;
+          }
+
           AbstractSiteMap nextSitemap = sitemapIndex.nextUnprocessedSitemap();
           reporter.getCounter("SitemapInjector", "sitemap indexes processed").increment(1);
 
@@ -407,7 +433,8 @@ public class SitemapInjector extends Injector {
             LOG.warn(
                 "URL limit reached, skipped remaining sitemaps of sitemap index {}",
                 sitemap.getUrl());
-            reporter.getCounter("SitemapInjector", "sitemap index URL limit reached").increment(1);
+            reporter.getCounter("SitemapInjector",
+                "sitemap index: URL limit reached").increment(1);
             return;
           }
 
@@ -417,18 +444,21 @@ public class SitemapInjector extends Injector {
           if (content == null) {
             sitemapIndex.getSitemaps().remove(nextSitemap);
             nextSitemap.setProcessed(true);
-            reporter.getCounter("SitemapInjector", "sitemaps failed to fetch").increment(1);
-            return; // TODO: count failed sub-sitemaps, break loop if a limit is reached
+            reporter.getCounter("SitemapInjector", "sitemaps failed to fetch")
+                .increment(1);
+            // TODO: count failed sub-sitemaps, break loop if a limit is reached
+            return;
           }
 
           try {
             AbstractSiteMap parsedSitemap = parseSitemap(content, nextSitemap);
             processSitemap(parsedSitemap, output, reporter, totalUrls,
-                processedSitemaps, maxUrls, customScore);
+                processedSitemaps, startTime, maxUrls, customScore);
           } catch (Exception e) {
             LOG.warn("failed to parse sitemap {}: {}" + nextSitemap.getUrl(),
                 StringUtils.stringifyException(e));
-            reporter.getCounter("SitemapInjector", "sitemaps failed to parse").increment(1);
+            reporter.getCounter("SitemapInjector", "sitemaps failed to parse")
+                .increment(1);
           }
           nextSitemap.setProcessed(true);
         }
@@ -487,6 +517,7 @@ public class SitemapInjector extends Injector {
 
         if (random != null) {
           if (randomSelect > random.nextFloat()) {
+            reporter.getCounter("SitemapInjector", "random skip").increment(1);
             continue;
           }
         }
