@@ -301,6 +301,8 @@ public class Generator2 extends Configured implements Tool {
       if (!schedule.shouldFetch(key, value, curTime)) {
         LOG.debug("-shouldFetch rejected '" + key + "', fetchTime="
             + value.getFetchTime() + ", curTime=" + curTime);
+        reporter.getCounter("Schedule rejected by status",
+            CrawlDatum.getStatusName(value.getStatus())).increment(1);
         return;
       }
 
@@ -331,7 +333,11 @@ public class Generator2 extends Configured implements Tool {
           && !restrictStatus.equalsIgnoreCase(CrawlDatum.getStatusName(value.getStatus()))) return;
 
       // consider only entries with a score superior to the threshold
-      if (scoreThreshold != Float.NaN && sort < scoreThreshold) return;
+      if (scoreThreshold != Float.NaN && sort < scoreThreshold) {
+        reporter.getCounter("Score below threshold by status",
+            CrawlDatum.getStatusName(value.getStatus())).increment(1);
+        return;
+      }
 
       // consider only entries with a retry (or fetch) interval lower than threshold
       if (intervalThreshold != -1 && value.getFetchInterval() > intervalThreshold) return;
