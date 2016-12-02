@@ -49,6 +49,9 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
 
   public static final String ADAPTIVE_FETCH_RETRY_PENALTY = "db.score.adaptive.penalty.fetch_retry";
 
+  // experimental: boost fresh URLs injected within the last 7 days
+  public static final String ADAPTIVE_INJECTED_BOOST = "db.score.adaptive.boost.injected";
+
   private Configuration conf;
 
   /**
@@ -61,6 +64,7 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
 
   private float adaptiveFetchTimeSort;
   private float adaptiveFetchRetryPenalty;
+  private float adaptiveBoostInjected;
 
   private Map<Byte, Float> statusSortMap = new TreeMap<Byte, Float>();
 
@@ -74,6 +78,7 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
         System.currentTimeMillis());
     adaptiveFetchTimeSort = conf.getFloat(ADAPTIVE_FETCH_TIME_SORT_FACTOR, .05f);
     adaptiveFetchRetryPenalty = conf.getFloat(ADAPTIVE_FETCH_RETRY_PENALTY, .1f);
+    adaptiveBoostInjected = conf.getFloat(ADAPTIVE_INJECTED_BOOST, .2f);
     String adaptiveStatusSortFile = conf.get(ADAPTIVE_STATUS_SORT_FACTOR_FILE, "adaptive-scoring.txt");
     Reader adaptiveStatusSortReader = conf.getConfResourceAsReader(adaptiveStatusSortFile);
     try {
@@ -126,6 +131,7 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
       throws ScoringFilterException {
     initSort *= datum.getScore();
     long fetchTime = datum.getFetchTime();
+    byte status = datum.getStatus();
     if (adaptiveFetchTimeSort > 0.0f) {
       //long daysSinceScheduledFetch = (curTime - fetchTime) / 86400000;
       //long log2days = 63 - Long.numberOfLeadingZeros(1+daysSinceScheduledFetch);
@@ -133,12 +139,16 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
       double log2days = Math.log1p(daysSinceScheduledFetch)/Math.log(2);
       float fetchTimeSort = (float) (adaptiveFetchTimeSort * log2days);
       initSort += fetchTimeSort;
+      if (status == CrawlDatum.STATUS_DB_UNFETCHED
+          && datum.getRetriesSinceFetch() == 0
+          && daysSinceScheduledFetch <= 7) {
+        initSort += adaptiveBoostInjected;
+      }
     }
-    byte status = datum.getStatus();
     if (statusSortMap.containsKey(status)) {
       initSort += statusSortMap.get(status);
     }
-    if (datum.getStatus() == CrawlDatum.STATUS_DB_UNFETCHED
+    if (status == CrawlDatum.STATUS_DB_UNFETCHED
         && datum.getRetriesSinceFetch() > 0) {
       initSort -= datum.getRetriesSinceFetch() * adaptiveFetchRetryPenalty;
     }
