@@ -149,8 +149,11 @@ public class SitemapInjector extends Injector {
 
       protocolFactory = new ProtocolFactory(job);
 
-      // SiteMapParser to allow "cross submits" from different domains (strict = do not allow)
-      boolean strict = jobConf.getBoolean("db.injector.sitemap.strict", true);
+      // SiteMapParser to allow "cross submits" from different prefixes
+      // (up to last slash), cf. http://www.sitemaps.org/protocol.html#location
+      // strict = true : do not allow
+      // TODO: need to pass a set of cross-submit allowed hosts
+      boolean strict = jobConf.getBoolean("db.injector.sitemap.strict", false);
       sitemapParser = new SiteMapParser(strict);
 
       maxRecursiveSitemaps = jobConf.getInt("db.injector.sitemap.index_max_size", 50001);
