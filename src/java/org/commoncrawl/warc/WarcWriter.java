@@ -15,6 +15,8 @@ import java.util.TimeZone;
 import java.util.UUID;
 import java.util.zip.GZIPOutputStream;
 
+import org.apache.nutch.metadata.Metadata;
+
 public class WarcWriter {
   protected OutputStream out = null;
   protected OutputStream origOut = null;
@@ -140,7 +142,8 @@ public class WarcWriter {
 
   public URI writeWarcResponseRecord(final URI targetUri, final String ip, final Date date,
                                      final URI warcinfoId, final URI relatedId, final String payloadDigest,
-                                     final String blockDigest, final String truncated, final byte[] content)
+                                     final String blockDigest, final String truncated, final byte[] content,
+                                     Metadata meta)
       throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
@@ -283,11 +286,11 @@ public class WarcWriter {
     endRecord();
   }
 
-  private void startRecord() throws IOException {
+  protected void startRecord() throws IOException {
     this.out = new CompressedOutputStream(this.origOut);
   }
 
-  private void endRecord() throws IOException {
+  protected void endRecord() throws IOException {
     CompressedOutputStream compressedOut = (CompressedOutputStream)this.out;
     compressedOut.finish();
     compressedOut.flush();

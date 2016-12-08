@@ -22,6 +22,7 @@ import org.apache.hadoop.mapreduce.TaskID;
 import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.security.TokenCache;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -37,6 +38,7 @@ import org.apache.nutch.util.NutchConfiguration;
 import org.commoncrawl.util.CombineSequenceFileInputFormat;
 import org.commoncrawl.util.CompressedNutchWritable;
 import org.commoncrawl.util.NullOutputCommitter;
+import org.commoncrawl.warc.WarcCdxWriter;
 import org.commoncrawl.warc.WarcWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,6 +62,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.zip.GZIPOutputStream;
 
 public class WarcExport extends Configured implements Tool {
   public static Logger LOG = LoggerFactory.getLogger(WarcExport.class);
@@ -117,6 +120,9 @@ public class WarcExport extends Configured implements Tool {
       private WarcWriter crawlDiagnosticsWarcWriter;
       private DataOutputStream robotsTxtWarcOut;
       private WarcWriter robotsTxtWarcWriter;
+      private DataOutputStream cdxOut;
+      private DataOutputStream crawlDiagnosticsCdxOut;
+      private DataOutputStream robotsTxtCdxOut;
       private URI warcinfoId;
       private URI textWarcinfoId;
       private URI crawlDiagnosticsWarcinfoId;
@@ -128,17 +134,28 @@ public class WarcExport extends Configured implements Tool {
       private boolean generateText;
       private boolean generateCrawlDiagnostics;
       private boolean generateRobotsTxt;
+      private boolean generateCdx;
 
-      public WarcRecordWriter(TaskAttemptContext context, Path outputPath, String filename, String textFilename,
-                              String hostname, String publisher, String operator, String software, String isPartOf,
-                              String description, boolean generateText, boolean generateCrawlDiagnostics,
-                              boolean generateRobotsTxt) throws IOException {
-
+      public WarcRecordWriter(TaskAttemptContext context, Path outputPath,
+          String filename, String textFilename, String hostname,
+          String publisher, String operator, String software, String isPartOf,
+          String description, boolean generateText,
+          boolean generateCrawlDiagnostics, boolean generateRobotsTxt,
+          boolean generateCdx, Path cdxPath) throws IOException {
 
         FileSystem fs = outputPath.getFileSystem(context.getConfiguration());
 
-        warcOut = fs.create(new Path(new Path(outputPath, "warc"), filename));
-        warcWriter = new WarcWriter(warcOut);
+        Path warcPath = new Path(new Path(outputPath, "warc"), filename);
+        warcOut = fs.create(warcPath);
+
+        this.generateCdx = generateCdx;
+        if (generateCdx) {
+          cdxOut = openCdxOutputStream(new Path(cdxPath, "warc"), filename,
+              context);
+          warcWriter = new WarcCdxWriter(warcOut, cdxOut, warcPath);
+        } else {
+          warcWriter = new WarcWriter(warcOut);
+        }
         warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
 
         this.generateText = generateText;
@@ -150,15 +167,33 @@ public class WarcExport extends Configured implements Tool {
 
         this.generateCrawlDiagnostics = generateCrawlDiagnostics;
         if (generateCrawlDiagnostics) {
-          crawlDiagnosticsWarcOut = fs.create(new Path(new Path(outputPath, "crawldiagnostics"), filename));
-          crawlDiagnosticsWarcWriter = new WarcWriter(crawlDiagnosticsWarcOut);
+          Path crawlDiagnosticsWarcPath = new Path(
+              new Path(outputPath, "crawldiagnostics"), filename);
+          crawlDiagnosticsWarcOut = fs.create(crawlDiagnosticsWarcPath);
+          if (generateCdx) {
+            crawlDiagnosticsCdxOut = openCdxOutputStream(new Path(cdxPath, "crawldiagnostics"),
+                filename, context);
+            crawlDiagnosticsWarcWriter = new WarcCdxWriter(crawlDiagnosticsWarcOut,
+                crawlDiagnosticsCdxOut, crawlDiagnosticsWarcPath);
+          } else {
+            crawlDiagnosticsWarcWriter = new WarcWriter(crawlDiagnosticsWarcOut);
+          }
           crawlDiagnosticsWarcinfoId = crawlDiagnosticsWarcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
         }
 
         this.generateRobotsTxt = generateRobotsTxt;
         if (generateRobotsTxt) {
-          robotsTxtWarcOut = fs.create(new Path(new Path(outputPath, "robotstxt"), filename));
-          robotsTxtWarcWriter = new WarcWriter(robotsTxtWarcOut);
+          Path robotsTxtWarcPath = new Path(new Path(outputPath, "robotstxt"),
+              filename);
+          robotsTxtWarcOut = fs.create(robotsTxtWarcPath);
+          if (generateCdx) {
+            robotsTxtCdxOut = openCdxOutputStream(new Path(cdxPath, "robotstxt"),
+                filename, context);
+            robotsTxtWarcWriter = new WarcCdxWriter(robotsTxtWarcOut,
+                robotsTxtCdxOut, robotsTxtWarcPath);
+          } else {
+            robotsTxtWarcWriter = new WarcWriter(robotsTxtWarcOut);
+          }
           robotsTxtWarcinfoId = robotsTxtWarcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
         }
 
@@ -177,6 +212,28 @@ public class WarcExport extends Configured implements Tool {
         return "sha1:" + base32.encodeAsString(sha1.digest(bytes));
       }
 
+      protected static int getStatusCode(String statusLine) {
+        int start = statusLine.indexOf(" ");
+        int end = statusLine.indexOf(" ", start + 1);
+        if (end == -1)
+          end = statusLine.length();
+        int code = 200;
+        try {
+          code = Integer.parseInt(statusLine.substring(start + 1, end));
+        } catch (NumberFormatException e) {
+        }
+        return code;
+      }
+
+      protected static DataOutputStream openCdxOutputStream(Path cdxPath,
+          String warcFilename, TaskAttemptContext context) throws IOException {
+        String cdxFilename = warcFilename.replaceFirst("\\.warc\\.gz$",
+            ".cdx.gz");
+        Path cdxFile = new Path(cdxPath, cdxFilename);
+        FileSystem fs = cdxPath.getFileSystem(context.getConfiguration());
+        return new DataOutputStream(new GZIPOutputStream(fs.create(cdxFile)));
+      }
+
       public synchronized void write(Text key, CompleteData value) throws IOException {
         URI targetUri;
 
@@ -193,6 +250,7 @@ public class WarcExport extends Configured implements Tool {
         String verbatimRequestHeaders = null;
         String headers = "";
         String statusLine = "";
+        int httpStatusCode = 200;
         String fetchDuration = null;
         String crawlDelay = null;
 
@@ -206,15 +264,19 @@ public class WarcExport extends Configured implements Tool {
             switch (pstatus.getCode()) {
               case ProtocolStatus.SUCCESS:
                 statusLine = "HTTP/1.0 200 OK";
+                httpStatusCode = 200;
                 break;
               case ProtocolStatus.TEMP_MOVED:
                 statusLine = "HTTP/1.0 302 Found";
+                httpStatusCode = 302;
                 break;
               case ProtocolStatus.MOVED:
                 statusLine = "HTTP/1.0 301 Moved Permanently";
+                httpStatusCode = 301;
                 break;
               case ProtocolStatus.NOTMODIFIED:
                 statusLine = "HTTP/1.0 304 Not Modified";
+                httpStatusCode = 304;
                 notModified = true;
                 break;
               default:
@@ -271,6 +333,7 @@ public class WarcExport extends Configured implements Tool {
             }
           } else if (name.equals(Nutch.FETCH_RESPONSE_VERBATIM_STATUS_KEY)) {
             statusLine = value.content.getMetadata().get(name);
+            httpStatusCode = getStatusCode(statusLine);
           } else if (name.equals(Nutch.FETCH_RESPONSE_STATUS_CODE_KEY)) {
           } else {
             // We have to fix up a few headers because we don't have the raw responses
@@ -328,10 +391,16 @@ public class WarcExport extends Configured implements Tool {
           System.arraycopy(value.content.getContent(), 0, responseBytes, responseHeaderBytes.length,
               value.content.getContent().length);
 
-          URI responseId = writer.writeWarcResponseRecord(targetUri, ip, date, infoId, requestId,
-              getSha1DigestWithAlg(value.content.getContent()), getSha1DigestWithAlg(responseBytes), truncatedReason,
-              responseBytes);
+          if (generateCdx) {
+            value.content.getMetadata().add("HTTP-Status-Code",
+                String.format("%d", httpStatusCode));
+          }
 
+          URI responseId = writer.writeWarcResponseRecord(targetUri, ip, date,
+              infoId, requestId,
+              getSha1DigestWithAlg(value.content.getContent()),
+              getSha1DigestWithAlg(responseBytes), truncatedReason,
+              responseBytes, value.content.getMetadata());
 
           // Write metadata record
           StringBuilder metadatasb = new StringBuilder(4096);
@@ -381,6 +450,15 @@ public class WarcExport extends Configured implements Tool {
         if (generateRobotsTxt) {
           robotsTxtWarcOut.close();
         }
+        if (generateCdx) {
+          cdxOut.close();
+          if (generateCrawlDiagnostics) {
+            crawlDiagnosticsCdxOut.close();
+          }
+          if (generateRobotsTxt) {
+            robotsTxtCdxOut.close();
+          }
+        }
       }
     }
 
@@ -412,6 +490,7 @@ public class WarcExport extends Configured implements Tool {
       boolean generateText = conf.getBoolean("warc.export.text", true);
       boolean generateCrawlDiagnostics = conf.getBoolean("warc.export.crawldiagnostics", false);
       boolean generateRobotsTxt = conf.getBoolean("warc.export.robotstxt", false);
+      boolean generateCdx= conf.getBoolean("warc.export.cdx", false);
 
       // WARC recommends - Prefix-Timestamp-Serial-Crawlhost.warc.gz
       String filename = prefix + "-" + prefixDate + "-" + numberFormat.format(partition) + "-" +
@@ -421,9 +500,16 @@ public class WarcExport extends Configured implements Tool {
 
 
       Path outputPath = getOutputPath(context);
+      Path cdxPath = null;
+      if (generateCdx) {
+        cdxPath = new Path(
+            conf.get("warc.export.cdx.path", outputPath.toString()));
+      }
 
-      return new WarcRecordWriter(context, outputPath, filename, textFilename, hostname, publisher, operator, software,
-          isPartOf, description, generateText, generateCrawlDiagnostics, generateRobotsTxt);
+      return new WarcRecordWriter(context, outputPath, filename, textFilename,
+          hostname, publisher, operator, software, isPartOf, description,
+          generateText, generateCrawlDiagnostics, generateRobotsTxt,
+          generateCdx, cdxPath);
     }
 
     @Override
@@ -460,7 +546,6 @@ public class WarcExport extends Configured implements Tool {
       if (key.getLength() == 0) {
         return;
       }
-
       context.write(key, new CompressedNutchWritable(value));
     }
   }
@@ -549,7 +634,8 @@ public class WarcExport extends Configured implements Tool {
   }
 
   public void export(Path outputDir, List<Path> segments, boolean generateText,
-      boolean generateCrawlDiagnostics, boolean generateRobotsTxt) throws IOException {
+      boolean generateCrawlDiagnostics, boolean generateRobotsTxt,
+      Path cdxPath) throws IOException {
     Configuration conf = getConf();
 
     // We compress ourselves, so this isn't necessary
@@ -559,6 +645,10 @@ public class WarcExport extends Configured implements Tool {
     conf.setBoolean("warc.export.text", generateText);
     conf.setBoolean("warc.export.crawldiagnostics", generateCrawlDiagnostics);
     conf.setBoolean("warc.export.robotstxt", generateRobotsTxt);
+    if (cdxPath != null) {
+      conf.setBoolean("warc.export.cdx", true);
+      conf.set("warc.export.cdx.path", cdxPath.toString());
+    }
 
     Job job = Job.getInstance(conf);
     job.setJobName("WarcExport: " + outputDir.toString());
@@ -622,7 +712,7 @@ public class WarcExport extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     if (args.length < 2) {
       System.err
-          .println("Usage: WarcExport <outputdir> (<segment> ... | -dir <segments>) [-notext] [-crawldiagnostics] [-robotstxt]");
+          .println("Usage: WarcExport <outputdir> (<segment> ... | -dir <segments>) [-notext] [-crawldiagnostics] [-robotstxt] [-cdx path]");
       return -1;
     }
 
@@ -632,6 +722,7 @@ public class WarcExport extends Configured implements Tool {
     boolean generateText = true;
     boolean generateCrawlDiagnostics = false;
     boolean generateRobotsTxt = false;
+    Path cdxPath = null;
 
     for (int i = 1; i < args.length; i++) {
       if (args[i].equals("-dir")) {
@@ -649,13 +740,16 @@ public class WarcExport extends Configured implements Tool {
         generateCrawlDiagnostics = true;
       } else if (args[i].equals("-robotstxt")) {
         generateRobotsTxt = true;
+      } else if (args[i].equals("-cdx")) {
+        cdxPath = new Path(args[++i]);
       } else {
         segments.add(new Path(args[i]));
       }
     }
 
     try {
-      export(outputDir, segments, generateText, generateCrawlDiagnostics, generateRobotsTxt);
+      export(outputDir, segments, generateText, generateCrawlDiagnostics,
+          generateRobotsTxt, cdxPath);
       return 0;
     } catch (final Exception e) {
       LOG.error("Exporter: " + StringUtils.stringifyException(e));
