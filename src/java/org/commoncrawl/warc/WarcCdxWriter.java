@@ -16,6 +16,8 @@ import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.nutch.metadata.Metadata;
 import org.archive.url.WaybackURLKeyMaker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -24,6 +26,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 public class WarcCdxWriter extends WarcWriter {
+
+  public static Logger LOG = LoggerFactory.getLogger(WarcCdxWriter.class);
 
   private static final Charset UTF_8 = StandardCharsets.UTF_8;
 
@@ -85,7 +89,10 @@ public class WarcCdxWriter extends WarcWriter {
     String surt = url;
     try {
       surt = surtKeyMaker.makeKey(url);
-    } catch (URISyntaxException e) {}
+    } catch (URISyntaxException e) {
+      LOG.error("Failed to make SURT for {}", url);
+      return;
+    }
     if (payloadDigest.startsWith("sha1:"))
       payloadDigest = payloadDigest.substring(5);
     cdxOut.write(surt.getBytes(UTF_8));
