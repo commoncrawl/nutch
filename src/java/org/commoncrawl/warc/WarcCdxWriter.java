@@ -14,6 +14,7 @@ import java.util.TimeZone;
 
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.nutch.metadata.Metadata;
 import org.archive.url.WaybackURLKeyMaker;
 import org.slf4j.Logger;
@@ -90,7 +91,8 @@ public class WarcCdxWriter extends WarcWriter {
     try {
       surt = surtKeyMaker.makeKey(url);
     } catch (URISyntaxException e) {
-      LOG.error("Failed to make SURT for {}", url);
+      LOG.error("Failed to make SURT for {}: {}", url,
+          StringUtils.stringifyException(e));
       return;
     }
     if (payloadDigest.startsWith("sha1:"))

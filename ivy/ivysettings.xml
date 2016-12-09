@@ -39,6 +39,9 @@
     value="[organisation]/[module]/[revision]/[module]-[revision]"/>
   <property name="maven2.pattern.ext"
     value="${maven2.pattern}.[ext]"/>
+  <property name="maven2.pattern.local"
+    value="${user.home}/.m2/repository/[organisation]/[module]/[revision]/[module]-[revision](-[classifier]).[ext]"
+    override="false" />
   <!-- pull in the local repository -->
   <include url="${ivy.default.conf.dir}/ivyconf-local.xml"/>
   <settings defaultResolver="default"/>
@@ -63,11 +66,16 @@
       pattern="${maven2.pattern.ext}"
       m2compatible="true"
       />
+    <filesystem name="maven2-local" m2compatible="true" >
+      <artifact pattern="${maven2.pattern.local}"/>
+      <ivy pattern="${maven2.pattern.local}"/>
+    </filesystem>
     <chain name="default" dual="true">
       <resolver ref="local"/>
       <resolver ref="maven-hadoop"/>
       <resolver ref="cloudera-repos"/>
       <resolver ref="maven2"/>
+      <resolver ref="maven2-local"/>
     </chain>
     <chain name="internal">
       <resolver ref="local"/>

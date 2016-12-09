@@ -82,7 +82,9 @@
 		<dependency org="net.spy" name="spymemcached" rev="2.10.3" />
 
 		<!-- https://mvnrepository.com/artifact/org.netpreserve.commons/webarchive-commons -->
-		<dependency org="org.netpreserve.commons" name="webarchive-commons" rev="1.1.7" transitive="false" />
+		<!-- dependency org="org.netpreserve.commons" name="webarchive-commons" rev="1.1.7" transitive="false" / -->
+		<!-- use fixes from https://github.com/commoncrawl/ia-web-commons/ -->
+		<dependency org="org.archive" name="ia-web-commons" rev="1.0-SNAPSHOT" transitive="false" />
 
 		<!--Configuration: test -->
 
