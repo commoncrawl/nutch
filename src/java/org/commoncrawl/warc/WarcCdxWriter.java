@@ -68,6 +68,7 @@ public class WarcCdxWriter extends WarcWriter {
     timestampFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     warcFilename = warcFilePath.toUri().getPath().replaceFirst("^/", "");
     ObjectMapper jsonMapper = new ObjectMapper();
+    jsonMapper.getFactory().configure(JsonGenerator.Feature.ESCAPE_NON_ASCII, true);
     jsonWriter = jsonMapper.writer(new JsonIndenter());
   }
 
@@ -103,7 +104,7 @@ public class WarcCdxWriter extends WarcWriter {
     cdxOut.write(' ');
     Map<String, String> data = new LinkedHashMap<String, String>();
     data.put("url", url);
-    data.put("mime", meta.get("Content-Type"));
+    data.put("mime", cleanMimeType(meta.get("Content-Type")));
     data.put("status", meta.get("HTTP-Status-Code"));
     data.put("digest", payloadDigest);
     data.put("length", String.format("%d", length));
@@ -111,6 +112,20 @@ public class WarcCdxWriter extends WarcWriter {
     data.put("filename", warcFilename);
     cdxOut.write(jsonWriter.writeValueAsBytes(data));
     cdxOut.write('\n');
+  }
+
+  protected static String cleanMimeType(String mime) {
+    if (mime == null)
+      return "unk";
+    final char[] delimiters = {';', ' '};
+    for (char delim : delimiters) {
+      int pos = mime.indexOf(delim);
+      if (pos > -1)
+        mime = mime.substring(0, pos);
+    }
+    if (mime.isEmpty())
+      return "unk";
+    return mime;
   }
 
 }
