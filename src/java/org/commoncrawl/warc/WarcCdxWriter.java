@@ -66,7 +66,7 @@ public class WarcCdxWriter extends WarcWriter {
     this.cdxOut = cdxOut;
     timestampFormat = new SimpleDateFormat("yyyyMMddHHmmss");
     timestampFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-    warcFilename = warcFilePath.toUri().getPath();
+    warcFilename = warcFilePath.toUri().getPath().replaceFirst("^/", "");
     ObjectMapper jsonMapper = new ObjectMapper();
     jsonWriter = jsonMapper.writer(new JsonIndenter());
   }
