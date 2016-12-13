@@ -294,17 +294,29 @@ public class WarcExport extends Configured implements Tool {
           }
         } else {
           // robots.txt, no CrawlDatum available
-          String httpDate = value.content.getMetadata().get("Date");
-          if (httpDate != null) {
+          String fetchTime = value.content.getMetadata().get(Nutch.FETCH_TIME_KEY);
+          if (fetchTime != null) {
             try {
-              date = HttpDateFormat.toDate(httpDate);
-            } catch (ParseException e) {
-              LOG.warn("Failed to parse HTTP Date {} for {}", httpDate, targetUri);
+              date = new Date(new Long(fetchTime));
+            } catch (NumberFormatException e) {
+              LOG.error("Invalid fetch time '{}' in content metadata of {}",
+                  fetchTime, value.url.toString());
+            }
+          }
+          if (date == null) {
+            String httpDate = value.content.getMetadata().get("Date");
+            if (httpDate != null) {
+              try {
+                date = HttpDateFormat.toDate(httpDate);
+              } catch (ParseException e) {
+                LOG.warn("Failed to parse HTTP Date {} for {}", httpDate,
+                    targetUri);
+                date = new Date();
+              }
+            } else {
+              LOG.warn("No HTTP Date for {}", targetUri);
               date = new Date();
             }
-          } else {
-            LOG.warn("No HTTP Date for {}", targetUri);
-            date = new Date();
           }
           // status is taken from header
         }
