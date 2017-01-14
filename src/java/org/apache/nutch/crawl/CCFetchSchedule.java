@@ -30,16 +30,31 @@ public class CCFetchSchedule extends DefaultFetchSchedule {
   private final static Logger LOG = LoggerFactory
       .getLogger(CCFetchSchedule.class);
 
-  private static final String RESET_FETCH_INTERVAL = "db.fetch.interval.reset.default";
+  private static final String RESET_FETCH_INTERVAL = "db.fetch.interval.reset";
+  private static final String FETCH_TIME_MAX_DAYS_AHEAD = "db.fetch.time.max.days.ahead";
 
-  private boolean resetFetchInterval;
+  private boolean resetFetchInterval = false;
+  private boolean resetFetchTime = false;
+  private long latestFetchTime;
 
   public void setConf(Configuration conf) {
     super.setConf(conf);
     if (conf == null)
       return;
     resetFetchInterval = conf.getBoolean(RESET_FETCH_INTERVAL, false);
-    LOG.info("{} = {}", RESET_FETCH_INTERVAL, resetFetchInterval);
+    if (resetFetchInterval) {
+      resetFetchInterval = true;
+      LOG.info("Resetting fetch interval if exceeding {} = {}",
+          "db.fetch.interval.max", maxInterval);
+    }
+    latestFetchTime = System.currentTimeMillis();
+    int fetchTimeMaxDaysAhead = conf.getInt(FETCH_TIME_MAX_DAYS_AHEAD, 0);
+    if (fetchTimeMaxDaysAhead > 0) {
+      resetFetchTime = true;
+      latestFetchTime += fetchTimeMaxDaysAhead * 24 * 60 * 60 * 1000;
+      LOG.info("Resetting fetch time if more than {} = {} days ahead",
+          FETCH_TIME_MAX_DAYS_AHEAD, fetchTimeMaxDaysAhead);
+    }
   }
 
   @Override
@@ -53,7 +68,7 @@ public class CCFetchSchedule extends DefaultFetchSchedule {
   @Override
   public CrawlDatum setPageGoneSchedule(Text url, CrawlDatum datum,
       long prevFetchTime, long prevModifiedTime, long fetchTime) {
-    if (resetFetchInterval && datum.getFetchInterval() != defaultInterval) {
+    if (resetFetchInterval && datum.getFetchInterval() > maxInterval) {
       datum.setFetchInterval(defaultInterval);
     }
     return super.setPageGoneSchedule(url, datum, prevFetchTime,
@@ -63,7 +78,7 @@ public class CCFetchSchedule extends DefaultFetchSchedule {
   @Override
   public CrawlDatum setPageRetrySchedule(Text url, CrawlDatum datum,
       long prevFetchTime, long prevModifiedTime, long fetchTime) {
-    if (resetFetchInterval && datum.getFetchInterval() != defaultInterval) {
+    if (resetFetchInterval && datum.getFetchInterval() > maxInterval) {
       datum.setFetchInterval(defaultInterval);
     }
     return super.setPageRetrySchedule(url, datum, prevFetchTime,
@@ -74,8 +89,11 @@ public class CCFetchSchedule extends DefaultFetchSchedule {
   public CrawlDatum setFetchSchedule(Text url, CrawlDatum datum,
           long prevFetchTime, long prevModifiedTime,
           long fetchTime, long modifiedTime, int state) {
-    if (resetFetchInterval && datum.getFetchInterval() != defaultInterval) {
+    if (resetFetchInterval && datum.getFetchInterval() > maxInterval) {
       datum.setFetchInterval(defaultInterval);
+    }
+    if (resetFetchTime && datum.getFetchTime() > latestFetchTime) {
+      datum.setFetchTime(latestFetchTime);
     }
     return super.setFetchSchedule(url, datum, prevFetchTime, prevModifiedTime,
         fetchTime, modifiedTime, state);
