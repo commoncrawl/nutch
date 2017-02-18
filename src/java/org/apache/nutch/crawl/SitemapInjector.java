@@ -53,6 +53,7 @@ import org.apache.nutch.protocol.Protocol;
 import org.apache.nutch.protocol.ProtocolFactory;
 import org.apache.nutch.protocol.ProtocolNotFound;
 import org.apache.nutch.protocol.ProtocolOutput;
+import org.apache.nutch.protocol.ProtocolStatus;
 import org.apache.nutch.scoring.ScoringFilterException;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
@@ -64,6 +65,7 @@ import crawlercommons.sitemaps.AbstractSiteMap;
 import crawlercommons.sitemaps.SiteMap;
 import crawlercommons.sitemaps.SiteMapIndex;
 import crawlercommons.sitemaps.SiteMapParser;
+import crawlercommons.sitemaps.SiteMapParserSAX;
 import crawlercommons.sitemaps.SiteMapURL;
 
 
@@ -154,7 +156,7 @@ public class SitemapInjector extends Injector {
       // strict = true : do not allow
       // TODO: need to pass a set of cross-submit allowed hosts
       boolean strict = jobConf.getBoolean("db.injector.sitemap.strict", false);
-      sitemapParser = new SiteMapParser(strict);
+      sitemapParser = new SiteMapParserSAX(strict, true);
 
       maxRecursiveSitemaps = jobConf.getInt("db.injector.sitemap.index_max_size", 50001);
       maxRecursiveUrlsPerSitemapIndex = jobConf.getLong(SITEMAP_MAX_URLS, 50000L * 50000);
@@ -321,10 +323,15 @@ public class SitemapInjector extends Injector {
         fetch = null;
       }
 
+      if (ProtocolStatus.STATUS_SUCCESS != protocolOutput.getStatus()) {
+        LOG.error("fetch of sitemap {} failed with: {}", url,
+            protocolOutput.getStatus().getMessage());
+        return null;        
+      }
       Content content = protocolOutput.getContent();
       if (content == null) {
-        LOG.error("fetch of sitemap " + url + " failed with: "
-            + protocolOutput.getStatus().getMessage());
+        LOG.error("No content for {}, status: {}", url,
+            protocolOutput.getStatus().getMessage());
         return null;
       }
       return content;
@@ -458,7 +465,7 @@ public class SitemapInjector extends Injector {
             processSitemap(parsedSitemap, output, reporter, totalUrls,
                 processedSitemaps, startTime, maxUrls, customScore);
           } catch (Exception e) {
-            LOG.warn("failed to parse sitemap {}: {}" + nextSitemap.getUrl(),
+            LOG.warn("failed to parse sitemap {}: {}", nextSitemap.getUrl(),
                 StringUtils.stringifyException(e));
             reporter.getCounter("SitemapInjector", "sitemaps failed to parse")
                 .increment(1);
