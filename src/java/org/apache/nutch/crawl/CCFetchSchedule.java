@@ -69,7 +69,7 @@ public class CCFetchSchedule extends DefaultFetchSchedule {
   public CrawlDatum setPageGoneSchedule(Text url, CrawlDatum datum,
       long prevFetchTime, long prevModifiedTime, long fetchTime) {
     if (resetFetchInterval && datum.getFetchInterval() > maxInterval) {
-      datum.setFetchInterval(defaultInterval);
+      datum.setFetchInterval(maxInterval);
     }
     return super.setPageGoneSchedule(url, datum, prevFetchTime,
         prevModifiedTime, fetchTime);
@@ -79,7 +79,7 @@ public class CCFetchSchedule extends DefaultFetchSchedule {
   public CrawlDatum setPageRetrySchedule(Text url, CrawlDatum datum,
       long prevFetchTime, long prevModifiedTime, long fetchTime) {
     if (resetFetchInterval && datum.getFetchInterval() > maxInterval) {
-      datum.setFetchInterval(defaultInterval);
+      datum.setFetchInterval(maxInterval);
     }
     return super.setPageRetrySchedule(url, datum, prevFetchTime,
         prevModifiedTime, fetchTime);
@@ -90,7 +90,7 @@ public class CCFetchSchedule extends DefaultFetchSchedule {
           long prevFetchTime, long prevModifiedTime,
           long fetchTime, long modifiedTime, int state) {
     if (resetFetchInterval && datum.getFetchInterval() > maxInterval) {
-      datum.setFetchInterval(defaultInterval);
+      datum.setFetchInterval(maxInterval);
     }
     if (resetFetchTime && datum.getFetchTime() > latestFetchTime) {
       datum.setFetchTime(latestFetchTime);
