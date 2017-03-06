@@ -147,7 +147,9 @@ public class WarcWriter {
       throws IOException {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_WARCINFO_ID, "<" + warcinfoId.toString() + ">");
-    extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
+    if (relatedId != null) {
+      extra.put(WARC_CONCURRENT_TO, "<" + relatedId.toString() + ">");
+    }
     extra.put(WARC_IP_ADDRESS, ip);
     extra.put(WARC_TARGET_URI, targetUri.toString());
 

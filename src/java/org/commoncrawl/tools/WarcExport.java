@@ -22,7 +22,6 @@ import org.apache.hadoop.mapreduce.TaskID;
 import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.security.TokenCache;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -51,6 +50,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.NumberFormat;
@@ -202,7 +202,7 @@ public class WarcExport extends Configured implements Tool {
         try {
           sha1 = MessageDigest.getInstance("SHA1");
         } catch (NoSuchAlgorithmException e) {
-          LOG.info("Unable to instantiate SHA1 MessageDigest object");
+          LOG.error("Unable to instantiate SHA1 MessageDigest object");
           throw new RuntimeException(e);
         }
       }
@@ -281,7 +281,7 @@ public class WarcExport extends Configured implements Tool {
                 break;
               default:
                 if (value.content.getMetadata().get(Nutch.FETCH_RESPONSE_VERBATIM_STATUS_KEY) == null) {
-                  LOG.info("Unknown or ambiguous protocol status");
+                  LOG.warn("Unknown or ambiguous protocol status");
                   return;
                 }
             }
@@ -365,8 +365,7 @@ public class WarcExport extends Configured implements Tool {
         }
 
         if (verbatimRequestHeaders == null) {
-          LOG.info("No request headers!");
-          return;
+          LOG.error("No request headers!");
         }
 
         if (useVerbatimResponseHeaders && verbatimResponseHeaders != null && !wasZipped) {
@@ -384,8 +383,11 @@ public class WarcExport extends Configured implements Tool {
           infoId = crawlDiagnosticsWarcinfoId;
         }
 
-        URI requestId = writer.writeWarcRequestRecord(targetUri, ip, date, infoId,
-            verbatimRequestHeaders.getBytes("utf-8"));
+        URI requestId = null;
+        if (verbatimRequestHeaders != null) {
+          requestId = writer.writeWarcRequestRecord(targetUri, ip, date, infoId,
+              verbatimRequestHeaders.getBytes(StandardCharsets.UTF_8));
+        }
 
         if (notModified) {
           /*
@@ -397,7 +399,7 @@ public class WarcExport extends Configured implements Tool {
           responsesb.append(statusLine).append(CRLF);
           responsesb.append(headers).append(CRLF);
 
-          byte[] responseHeaderBytes = responsesb.toString().getBytes("utf-8");
+          byte[] responseHeaderBytes = responsesb.toString().getBytes(StandardCharsets.UTF_8);
           byte[] responseBytes = new byte[responseHeaderBytes.length + value.content.getContent().length];
           System.arraycopy(responseHeaderBytes, 0, responseBytes, 0, responseHeaderBytes.length);
           System.arraycopy(value.content.getContent(), 0, responseBytes, responseHeaderBytes.length,
@@ -434,14 +436,14 @@ public class WarcExport extends Configured implements Tool {
             metadatasb.append(CRLF);
 
             writer.writeWarcMetadataRecord(targetUri, date, infoId,
-                responseId, null, metadatasb.toString().getBytes("utf-8"));
+                responseId, null, metadatasb.toString().getBytes(StandardCharsets.UTF_8));
           }
 
           // Write text extract
           if (generateText && value.parseText != null) {
             final String text = value.parseText.getText();
             if (text != null) {
-              byte[] conversionBytes = value.parseText.getText().getBytes("utf-8");
+              byte[] conversionBytes = value.parseText.getText().getBytes(StandardCharsets.UTF_8);
               if (conversionBytes.length != 0) {
                 textWarcWriter.writeWarcConversionRecord(targetUri, date, textWarcinfoId, responseId,
                     getSha1DigestWithAlg(conversionBytes), "text/plain", conversionBytes);
