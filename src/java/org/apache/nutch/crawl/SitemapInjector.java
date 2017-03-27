@@ -61,6 +61,7 @@ import org.apache.nutch.util.TimingUtil;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import crawlercommons.robots.BaseRobotRules;
 import crawlercommons.sitemaps.AbstractSiteMap;
 import crawlercommons.sitemaps.SiteMap;
 import crawlercommons.sitemaps.SiteMapIndex;
@@ -142,6 +143,8 @@ public class SitemapInjector extends Injector {
     protected int maxSitemapProcessingTime;
     protected int maxUrlLength = 512;
 
+    protected boolean checkRobotsTxt = true;
+
     private ProtocolFactory protocolFactory;
     private SiteMapParser sitemapParser;
     private ExecutorService executorService;
@@ -160,6 +163,8 @@ public class SitemapInjector extends Injector {
 
       maxRecursiveSitemaps = jobConf.getInt("db.injector.sitemap.index_max_size", 50001);
       maxRecursiveUrlsPerSitemapIndex = jobConf.getLong(SITEMAP_MAX_URLS, 50000L * 50000);
+
+      checkRobotsTxt = jobConf.getBoolean("db.injector.sitemap.checkrobotstxt", true);
 
       // make sure a sitemap is entirely, even recursively processed within 80%
       // of the task timeout
@@ -239,11 +244,8 @@ public class SitemapInjector extends Injector {
 
       long startTime = System.currentTimeMillis();
 
-      Content content = getContent(url);
+      Content content = getContent(url, reporter);
       if (content == null) {
-        reporter
-            .getCounter("SitemapInjector", "failed to fetch sitemap content")
-            .increment(1);
         return;
       }
 
@@ -259,15 +261,28 @@ public class SitemapInjector extends Injector {
     class FetchSitemapCallable implements Callable<ProtocolOutput> {
       private Protocol protocol;
       private String url;
+      private Reporter reporter;
 
-      public FetchSitemapCallable(Protocol protocol, String url) {
+      public FetchSitemapCallable(Protocol protocol, String url, Reporter reporter) {
         this.protocol = protocol;
         this.url = url;
+        this.reporter = reporter;
       }
 
       @Override
       public ProtocolOutput call() throws Exception {
-        return protocol.getProtocolOutput(new Text(url), new CrawlDatum());
+        Text turl = new Text(url);
+        if (checkRobotsTxt) {
+          BaseRobotRules rules = protocol.getRobotRules(turl, null, null);
+          if (!rules.isAllowed(url)) {
+            LOG.info("Fetch of sitemap forbidden by robots.txt: {}", url);
+            reporter
+              .getCounter("SitemapInjector", "failed to fetch sitemap content, robots.txt disallow")
+              .increment(1);
+            return null;
+          }
+        }
+        return protocol.getProtocolOutput(turl, new CrawlDatum());
       }
     }
 
@@ -299,17 +314,20 @@ public class SitemapInjector extends Injector {
       }
     }
 
-    private Content getContent(String url) {
+    private Content getContent(String url, Reporter reporter) {
       Protocol protocol = null;
       try {
         protocol = protocolFactory.getProtocol(url);
       } catch (ProtocolNotFound e) {
         LOG.error("protocol not found " + url);
+        reporter
+          .getCounter("SitemapInjector", "failed to fetch sitemap content, protocol not found")
+          .increment(1);
         return null;
       }
 
       LOG.info("fetching sitemap " + url);
-      FetchSitemapCallable fetch = new FetchSitemapCallable(protocol, url);
+      FetchSitemapCallable fetch = new FetchSitemapCallable(protocol, url, reporter);
       Future<ProtocolOutput> task = executorService.submit(fetch);
       ProtocolOutput protocolOutput = null;
       try {
@@ -318,20 +336,32 @@ public class SitemapInjector extends Injector {
         LOG.error("fetch of sitemap {} failed with: {}", url,
             StringUtils.stringifyException(e));
         task.cancel(true);
+        reporter
+          .getCounter("SitemapInjector", "failed to fetch sitemap content, exception")
+          .increment(1);
         return null;
       } finally {
         fetch = null;
       }
 
+      if (protocolOutput == null) {
+        return null;
+      }
       if (ProtocolStatus.STATUS_SUCCESS != protocolOutput.getStatus()) {
         LOG.error("fetch of sitemap {} failed with: {}", url,
             protocolOutput.getStatus().getMessage());
-        return null;        
+        reporter
+          .getCounter("SitemapInjector", "failed to fetch sitemap content, HTTP status != 200")
+          .increment(1);
+        return null;
       }
       Content content = protocolOutput.getContent();
       if (content == null) {
         LOG.error("No content for {}, status: {}", url,
             protocolOutput.getStatus().getMessage());
+        reporter
+          .getCounter("SitemapInjector", "failed to fetch sitemap content, empty content")
+          .increment(1);
         return null;
       }
       return content;
@@ -400,6 +430,7 @@ public class SitemapInjector extends Injector {
           processedSitemaps.add(sitemap.getUrl().toString());
         }
 
+        int failedSubSitemaps = 0;
         while (sitemapIndex.hasUnprocessedSitemap()) {
 
           long elapsed = (System.currentTimeMillis()-startTime)/1000;
@@ -419,6 +450,17 @@ public class SitemapInjector extends Injector {
             reporter
                 .getCounter("SitemapInjector",
                     "sitemap index: no URLs after 50% of time limit")
+                .increment(1);
+            return;
+          }
+          if (failedSubSitemaps > (maxRecursiveSitemaps / 2)) {
+            // do not spend too much time to fetch broken subsitemaps
+            LOG.warn(
+                "Too many failures, skipped remaining sitemaps of sitemap index {}",
+                sitemap.getUrl());
+            reporter
+                .getCounter("SitemapInjector",
+                    "sitemap index: too many failures")
                 .increment(1);
             return;
           }
@@ -450,14 +492,14 @@ public class SitemapInjector extends Injector {
 
           processedSitemaps.add(url);
 
-          Content content = getContent(url);
+          Content content = getContent(url, reporter);
           if (content == null) {
             sitemapIndex.getSitemaps().remove(nextSitemap);
             nextSitemap.setProcessed(true);
             reporter.getCounter("SitemapInjector", "sitemaps failed to fetch")
                 .increment(1);
-            // TODO: count failed sub-sitemaps, break loop if a limit is reached
-            return;
+            failedSubSitemaps++;
+            continue;
           }
 
           try {
@@ -469,6 +511,7 @@ public class SitemapInjector extends Injector {
                 StringUtils.stringifyException(e));
             reporter.getCounter("SitemapInjector", "sitemaps failed to parse")
                 .increment(1);
+            failedSubSitemaps++;
           }
           nextSitemap.setProcessed(true);
         }
@@ -545,7 +588,10 @@ public class SitemapInjector extends Injector {
 
         String url = siteMapURL.getUrl().toString();
         if (url.length() > maxUrlLength) {
-          LOG.warn("Skipping overlong URL: {}", url);
+          LOG.warn(
+              "Skipping overlong URL: {} ... (truncated, length = {} characters)",
+              url.substring(0, maxUrlLength), url.length());
+          continue;
         }
         try {
           url = urlNormalizers.normalize(url, URLNormalizers.SCOPE_INJECT);
