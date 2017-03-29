@@ -36,21 +36,74 @@ import org.apache.nutch.scoring.AbstractScoringFilter;
 import org.apache.nutch.scoring.ScoringFilterException;
 
 /**
- * First step to an adaptive and dynamic scoring filter.
+ * Scoring filter adaptive to page score, fetch status and time.
+ * 
+ * <p>
+ * The generator score of a page depends in a configurable way on
+ * <ul>
+ * <li>the page score</li>
+ * <li>the crawl status (fetched, not modified, redirect, gone)</li>
+ * <li>the time elapsed since the scheduled fetch time</li>
+ * </ul>
+ * </p>
+ * 
+ * <p>
+ * While {@link org.apache.nutch.crawl.FetchSchedule}s set a fix (re)retch time
+ * immediately after a page has been fetched, this scoring plugin allows a more
+ * dynamic selection how many and which pages should be generated based on the
+ * current configuration, independent from previous settings, by adjusting
+ * <ul>
+ * <li>the plugin parameters in accordance with</li>
+ * <li><code>-topN</code> and <code>generate.min.score</code></li>
+ * <li><code>generate.max.count</code></li>
+ * </ul>
+ * 
+ * <p>
+ * The plugin is thought for large crawls where there are far more URLs than can
+ * be fetched and taking a good sample is mandatory. Sampling is, of course,
+ * usually based on the page score - relevant pages with a high score are
+ * fetched with higher probability. However, a dynamic rotation of generated
+ * items helps to avoid that the same page with a slightly higher score is
+ * fetched again while others are still waiting to be queued. It also allows to
+ * adjust the probabilities that gone or not modified pages are refetched.
+ * </p>
+ * 
  */
 public class AdaptiveScoringFilter extends AbstractScoringFilter {
 
   private final static Logger LOG = LoggerFactory
       .getLogger(AdaptiveScoringFilter.class);
 
-  public static final String ADAPTIVE_FETCH_TIME_SORT_FACTOR = "db.score.adaptive.factor.fetchtime";
+  /**
+   * Generator sort value factor for pages to be (re)fetched based on the time
+   * (in days) elapsed since the scheduled fetch time:
+   * 
+   * <pre>
+   * generator_sort_value += (factor * days_elapsed)
+   * </pre>
+   */
+  public static final String ADAPTIVE_FETCH_TIME_SORT_FACTOR = "scoring.adaptive.factor.fetchtime";
 
-  public static final String ADAPTIVE_STATUS_SORT_FACTOR_FILE = "db.score.adaptive.sort.by_status.file";
+  public static final String ADAPTIVE_STATUS_SORT_FACTOR_FILE = "scoring.adaptive.sort.by_status.file";
 
-  public static final String ADAPTIVE_FETCH_RETRY_PENALTY = "db.score.adaptive.penalty.fetch_retry";
+  /**
+   * Factor penalizing pages not successfully fetched for each failed fetch
+   * trial:
+   * 
+   * <pre>
+   * generator_sort_value -= (penalty * retries_since_fetch)
+   * </pre>
+   */
+  public static final String ADAPTIVE_FETCH_RETRY_PENALTY = "scoring.adaptive.penalty.fetch_retry";
 
-  // experimental: boost fresh URLs injected within the last 7 days
-  public static final String ADAPTIVE_INJECTED_BOOST = "db.score.adaptive.boost.injected";
+  /**
+   * Boost recently injected URLs (injected within the last 7 days):
+   * 
+   * <pre>
+   * generator_sort_value += injected_boost
+   * </pre>
+   */
+  public static final String ADAPTIVE_INJECTED_BOOST = "scoring.adaptive.boost.injected";
 
   private Configuration conf;
 
@@ -76,11 +129,15 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
     this.conf = conf;
     curTime = conf.getLong(Generator.GENERATOR_CUR_TIME,
         System.currentTimeMillis());
-    adaptiveFetchTimeSort = conf.getFloat(ADAPTIVE_FETCH_TIME_SORT_FACTOR, .05f);
-    adaptiveFetchRetryPenalty = conf.getFloat(ADAPTIVE_FETCH_RETRY_PENALTY, .1f);
+    adaptiveFetchTimeSort = conf.getFloat(ADAPTIVE_FETCH_TIME_SORT_FACTOR,
+        .01f);
+    adaptiveFetchRetryPenalty = conf.getFloat(ADAPTIVE_FETCH_RETRY_PENALTY,
+        .1f);
     adaptiveBoostInjected = conf.getFloat(ADAPTIVE_INJECTED_BOOST, .2f);
-    String adaptiveStatusSortFile = conf.get(ADAPTIVE_STATUS_SORT_FACTOR_FILE, "adaptive-scoring.txt");
-    Reader adaptiveStatusSortReader = conf.getConfResourceAsReader(adaptiveStatusSortFile);
+    String adaptiveStatusSortFile = conf.get(ADAPTIVE_STATUS_SORT_FACTOR_FILE,
+        "adaptive-scoring.txt");
+    Reader adaptiveStatusSortReader = conf
+        .getConfResourceAsReader(adaptiveStatusSortFile);
     try {
       readSortFile(adaptiveStatusSortReader);
     } catch (IOException e) {
@@ -89,7 +146,7 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
     }
   }
 
-  private void readSortFile (Reader sortFileReader) throws IOException {
+  private void readSortFile(Reader sortFileReader) throws IOException {
     BufferedReader reader = new BufferedReader(sortFileReader);
     String line = null;
     String[] splits = null;
@@ -98,7 +155,8 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
         continue; // skip empty lines and comments
       splits = line.split("\t");
       if (splits.length < 2) {
-        LOG.warn("Invalid line (expected format <status> \t <sortval>): {}", line);
+        LOG.warn("Invalid line (expected format <status> \t <sortval>): {}",
+            line);
         continue;
       }
       float value;
@@ -120,7 +178,6 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
         LOG.warn("Invalid status `{}' in line: {}", splits[0], line);
       }
     }
-
   }
 
   /**
@@ -132,25 +189,28 @@ public class AdaptiveScoringFilter extends AbstractScoringFilter {
     initSort *= datum.getScore();
     long fetchTime = datum.getFetchTime();
     byte status = datum.getStatus();
+    long daysSinceScheduledFetch = (curTime - fetchTime) / 86400000;
     if (adaptiveFetchTimeSort > 0.0f) {
-      //long daysSinceScheduledFetch = (curTime - fetchTime) / 86400000;
-      //long log2days = 63 - Long.numberOfLeadingZeros(1+daysSinceScheduledFetch);
-      double daysSinceScheduledFetch = (curTime - fetchTime) / 86400000.0d;
-      double log2days = Math.log1p(daysSinceScheduledFetch)/Math.log(2);
-      float fetchTimeSort = (float) (adaptiveFetchTimeSort * log2days);
+      // boost/penalize by time elapsed since the scheduled fetch time
+      float fetchTimeSort = (float) (adaptiveFetchTimeSort
+          * daysSinceScheduledFetch);
       initSort += fetchTimeSort;
-      if (status == CrawlDatum.STATUS_DB_UNFETCHED
-          && datum.getRetriesSinceFetch() == 0
-          && daysSinceScheduledFetch <= 7) {
-        initSort += adaptiveBoostInjected;
-      }
     }
     if (statusSortMap.containsKey(status)) {
+      // boost/penalize by fetch status
       initSort += statusSortMap.get(status);
     }
-    if (status == CrawlDatum.STATUS_DB_UNFETCHED
-        && datum.getRetriesSinceFetch() > 0) {
-      initSort -= datum.getRetriesSinceFetch() * adaptiveFetchRetryPenalty;
+    if (status == CrawlDatum.STATUS_DB_UNFETCHED) {
+      if (datum.getRetriesSinceFetch() > 0) {
+        // penalize by fetch retry count
+        initSort -= datum.getRetriesSinceFetch() * adaptiveFetchRetryPenalty;
+      } else if (daysSinceScheduledFetch <= 7) {
+        // boost recently injected URLs
+        // - status unfetched
+        // - retry count == 0
+        // - scheduled fetch with the last 7 days
+        initSort += adaptiveBoostInjected;
+      }
     }
     return initSort;
   }

@@ -2,8 +2,10 @@
 # Configuration file for scoring-adaptive
 #
 # See also properties
-#  db.score.adaptive.sort.by_status.file
-#  db.score.adaptive.factor.fetchtime
+#  scoring.adaptive.sort.by_status.file
+#  scoring.adaptive.factor.fetchtime
+#  scoring.adaptive.penalty.fetch_retry
+#  scoring.adaptive.boost.injected
 #
 # Format:
 #   <status> <tab> <sortvalue>
