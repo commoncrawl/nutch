@@ -29,6 +29,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.fs.FileSystem;
@@ -167,10 +168,13 @@ public class SitemapInjector extends Injector {
       checkRobotsTxt = jobConf.getBoolean("db.injector.sitemap.checkrobotstxt", true);
 
       // make sure a sitemap is entirely, even recursively processed within 80%
-      // of the task timeout
-      int taskTimeout = jobConf.getInt("mapred.task.timeout", 600000);
-      maxSitemapProcessingTime = (int) (taskTimeout * .8);
-      // TODO: apply total timeout
+      // of the task timeout, do not start processing a subsitemap if fetch
+      // and parsing time may hit the task timeout
+      int taskTimeout = jobConf.getInt("mapreduce.task.timeout", 900000) / 1000;
+      maxSitemapProcessingTime = taskTimeout - (2 * maxSitemapFetchTime);
+      if ((taskTimeout * .8) < maxSitemapProcessingTime) {
+        maxSitemapProcessingTime = (int) (taskTimeout * .8);
+      }
 
       // fetch intervals defined in sitemap should within the defined range
       minInterval = jobConf.getFloat("db.fetch.schedule.adaptive.min_interval", 60);
@@ -333,12 +337,17 @@ public class SitemapInjector extends Injector {
       try {
         protocolOutput = task.get(maxSitemapFetchTime, TimeUnit.SECONDS);
       } catch (Exception e) {
-        LOG.error("fetch of sitemap {} failed with: {}", url,
-            StringUtils.stringifyException(e));
+        if (e instanceof TimeoutException) {
+          LOG.error("fetch of sitemap {} timed out", url);
+          reporter.getCounter("SitemapInjector",
+              "failed to fetch sitemap content, timeout").increment(1);
+        } else {
+          LOG.error("fetch of sitemap {} failed with: {}", url,
+              StringUtils.stringifyException(e));
+          reporter.getCounter("SitemapInjector",
+              "failed to fetch sitemap content, exception").increment(1);
+        }
         task.cancel(true);
-        reporter
-          .getCounter("SitemapInjector", "failed to fetch sitemap content, exception")
-          .increment(1);
         return null;
       } finally {
         fetch = null;
@@ -348,8 +357,9 @@ public class SitemapInjector extends Injector {
         return null;
       }
       if (ProtocolStatus.STATUS_SUCCESS != protocolOutput.getStatus()) {
-        LOG.error("fetch of sitemap {} failed with: {}", url,
-            protocolOutput.getStatus().getMessage());
+        // TODO: follow redirects
+        LOG.error("fetch of sitemap {} failed with status code {}", url,
+            protocolOutput.getStatus().getCode());
         reporter
           .getCounter("SitemapInjector", "failed to fetch sitemap content, HTTP status != 200")
           .increment(1);
