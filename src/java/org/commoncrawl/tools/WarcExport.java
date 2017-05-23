@@ -42,14 +42,14 @@ import org.commoncrawl.warc.WarcWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -60,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.zip.GZIPOutputStream;
@@ -141,7 +142,8 @@ public class WarcExport extends Configured implements Tool {
           String publisher, String operator, String software, String isPartOf,
           String description, boolean generateText,
           boolean generateCrawlDiagnostics, boolean generateRobotsTxt,
-          boolean generateCdx, Path cdxPath) throws IOException {
+          boolean generateCdx, Path cdxPath, Date captureStartDate)
+          throws IOException {
 
         FileSystem fs = outputPath.getFileSystem(context.getConfiguration());
 
@@ -156,13 +158,17 @@ public class WarcExport extends Configured implements Tool {
         } else {
           warcWriter = new WarcWriter(warcOut);
         }
-        warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
+        warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname,
+            publisher, operator, software, isPartOf, description,
+            captureStartDate);
 
         this.generateText = generateText;
         if (generateText) {
           textWarcOut = fs.create(new Path(new Path(outputPath, "text"), textFilename));
           textWarcWriter = new WarcWriter(textWarcOut);
-          textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename, hostname, publisher, operator, software, isPartOf, description);
+          textWarcinfoId = textWarcWriter.writeWarcinfoRecord(textFilename,
+              hostname, publisher, operator, software, isPartOf, description,
+              captureStartDate);
         }
 
         this.generateCrawlDiagnostics = generateCrawlDiagnostics;
@@ -178,7 +184,9 @@ public class WarcExport extends Configured implements Tool {
           } else {
             crawlDiagnosticsWarcWriter = new WarcWriter(crawlDiagnosticsWarcOut);
           }
-          crawlDiagnosticsWarcinfoId = crawlDiagnosticsWarcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
+          crawlDiagnosticsWarcinfoId = crawlDiagnosticsWarcWriter
+              .writeWarcinfoRecord(filename, hostname, publisher, operator,
+                  software, isPartOf, description, captureStartDate);
         }
 
         this.generateRobotsTxt = generateRobotsTxt;
@@ -194,7 +202,9 @@ public class WarcExport extends Configured implements Tool {
           } else {
             robotsTxtWarcWriter = new WarcWriter(robotsTxtWarcOut);
           }
-          robotsTxtWarcinfoId = robotsTxtWarcWriter.writeWarcinfoRecord(filename, hostname, publisher, operator, software, isPartOf, description);
+          robotsTxtWarcinfoId = robotsTxtWarcWriter.writeWarcinfoRecord(
+              filename, hostname, publisher, operator, software, isPartOf,
+              description, captureStartDate);
         }
 
         base32 = new Base32();
@@ -486,7 +496,7 @@ public class WarcExport extends Configured implements Tool {
       numberFormat.setMinimumIntegerDigits(5);
       numberFormat.setGroupingUsed(false);
 
-      SimpleDateFormat fileDate = new SimpleDateFormat("yyyyMMddHHmmss");
+      SimpleDateFormat fileDate = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
       fileDate.setTimeZone(TimeZone.getTimeZone("GMT"));
 
       Configuration conf = context.getConfiguration();
@@ -494,6 +504,14 @@ public class WarcExport extends Configured implements Tool {
       String prefix = conf.get("warc.export.prefix", "CC-CRAWL");
       String textPrefix = conf.get("warc.export.textprefix", "CC-CRAWL-TEXT");
       String prefixDate = conf.get("warc.export.date", fileDate.format(new Date()));
+      String endDate = conf.get("warc.export.date.end", prefixDate);
+      Date captureStartDate = new Date();
+      try {
+        captureStartDate = fileDate.parse(prefixDate);
+      } catch (ParseException e) {
+        LOG.error("Failed to parse warc.export.date {}: {}", prefixDate,
+            e.getMessage());
+      }
 
       String hostname = conf.get("warc.export.hostname", "localhost");
       String publisher = conf.get("warc.export.publisher", null);
@@ -507,11 +525,14 @@ public class WarcExport extends Configured implements Tool {
       boolean generateCdx= conf.getBoolean("warc.export.cdx", false);
 
       // WARC recommends - Prefix-Timestamp-Serial-Crawlhost.warc.gz
-      String filename = prefix + "-" + prefixDate + "-" + numberFormat.format(partition) + "-" +
-          hostname + ".warc.gz";
-      String textFilename = textPrefix + "-" + prefixDate + "-" + numberFormat.format(partition) + "-" +
-          hostname + ".warc.gz";
-
+      //   https://github.com/iipc/warc-specifications/blob/gh-pages/specifications/warc-format/warc-1.1/index.md#annex-b-informative-warc-file-size-and-name-recommendations
+      // WARC-Date : "The timestamp shall represent the instant that data
+      //      capture for record creation began."
+      //   https://github.com/iipc/warc-specifications/blob/gh-pages/specifications/warc-format/warc-1.1/index.md#warc-date-mandatory
+      String filename = prefix + "-" + prefixDate + "-" + endDate + "-"
+          + numberFormat.format(partition) + ".warc.gz";
+      String textFilename = textPrefix + "-" + prefixDate + "-" + endDate + "-"
+          + numberFormat.format(partition) + ".warc.gz";
 
       Path outputPath = getOutputPath(context);
       Path cdxPath = null;
@@ -523,7 +544,7 @@ public class WarcExport extends Configured implements Tool {
       return new WarcRecordWriter(context, outputPath, filename, textFilename,
           hostname, publisher, operator, software, isPartOf, description,
           generateText, generateCrawlDiagnostics, generateRobotsTxt,
-          generateCdx, cdxPath);
+          generateCdx, cdxPath, captureStartDate);
     }
 
     @Override
@@ -630,20 +651,10 @@ public class WarcExport extends Configured implements Tool {
 
   public String getHostname() {
     try {
-      Process p = Runtime.getRuntime().exec("hostname -f");
-      p.waitFor();
-      BufferedReader in = new BufferedReader(
-          new InputStreamReader(p.getInputStream()));
-      String hostname = in.readLine();
-      if (hostname != null && hostname.length() != 0 && p.exitValue() == 0) {
-        return hostname;
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
+      return InetAddress.getLocalHost().getHostName();
+    } catch (UnknownHostException e) {
+      LOG.warn("Failed to get hostname: {}", e.getMessage());
     }
-
     return "localhost";
   }
 

@@ -83,7 +83,7 @@ public class WarcWriter {
    * @throws IOException
    */
   public URI writeWarcinfoRecord(String filename, String hostname, String publisher, String operator, String software,
-                                 String isPartOf, String description) throws IOException  {
+                                 String isPartOf, String description, Date date) throws IOException  {
     Map<String, String> extra = new LinkedHashMap<String, String>();
     extra.put(WARC_FILENAME, filename);
 
@@ -123,7 +123,7 @@ public class WarcWriter {
     byte[] ba = sb.toString().getBytes("utf-8");
     URI recordId = getRecordId();
 
-    writeRecord(WARC_INFO, new Date(), "application/warc-fields", recordId, extra,
+    writeRecord(WARC_INFO, date, "application/warc-fields", recordId, extra,
         new ByteArrayInputStream(ba), ba.length);
     return recordId;
   }
