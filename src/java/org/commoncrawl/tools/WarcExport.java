@@ -33,6 +33,7 @@ import org.apache.nutch.parse.ParseText;
 import org.apache.nutch.protocol.Content;
 import org.apache.nutch.protocol.ProtocolStatus;
 import org.apache.nutch.util.HadoopFSUtil;
+import org.apache.nutch.util.MimeUtil;
 import org.apache.nutch.util.NutchConfiguration;
 import org.commoncrawl.util.CombineSequenceFileInputFormat;
 import org.commoncrawl.util.CompressedNutchWritable;
@@ -136,6 +137,7 @@ public class WarcExport extends Configured implements Tool {
       private boolean generateCrawlDiagnostics;
       private boolean generateRobotsTxt;
       private boolean generateCdx;
+      private MimeUtil mimeUtil;
 
       public WarcRecordWriter(TaskAttemptContext context, Path outputPath,
           String filename, String textFilename, String hostname,
@@ -206,6 +208,8 @@ public class WarcExport extends Configured implements Tool {
               filename, hostname, publisher, operator, software, isPartOf,
               description, captureStartDate);
         }
+
+        mimeUtil = new MimeUtil(context.getConfiguration());
 
         base32 = new Base32();
 
@@ -419,6 +423,12 @@ public class WarcExport extends Configured implements Tool {
             value.content.getMetadata().add("HTTP-Status-Code",
                 String.format("%d", httpStatusCode));
           }
+
+          // work-around in case detected content type in segments needs to be fixed
+          String detectedType = mimeUtil.autoResolveContentType(
+              value.content.getMetadata().get("Content-Type"),
+              targetUri.toString(), responseBytes);
+          value.content.setContentType(detectedType);
 
           URI responseId = writer.writeWarcResponseRecord(targetUri, ip, date,
               infoId, requestId,
