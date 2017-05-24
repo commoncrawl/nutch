@@ -366,7 +366,7 @@ public class WarcExport extends Configured implements Tool {
               String ce = value.content.getMetadata().get(name);
               if ("gzip".equals(ce) || "x-gzip".equals(ce) || "deflate".equals(ce)) {
                 wasZipped = true;
-              } 
+              }
             } else if (name.equalsIgnoreCase("Transfer-Encoding")) {
             } else {
               headers += name + ": " + value.content.getMetadata().get(name) + CRLF;
@@ -424,7 +424,7 @@ public class WarcExport extends Configured implements Tool {
               infoId, requestId,
               getSha1DigestWithAlg(value.content.getContent()),
               getSha1DigestWithAlg(responseBytes), truncatedReason,
-              responseBytes, value.content.getMetadata());
+              responseBytes, value.content);
 
           // Write metadata record
           StringBuilder metadatasb = new StringBuilder(4096);

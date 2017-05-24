@@ -15,7 +15,7 @@ import java.util.TimeZone;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.nutch.metadata.Metadata;
+import org.apache.nutch.protocol.Content;
 import org.archive.url.WaybackURLKeyMaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,18 +75,18 @@ public class WarcCdxWriter extends WarcWriter {
   public URI writeWarcResponseRecord(final URI targetUri, final String ip,
       final Date date, final URI warcinfoId, final URI relatedId,
       final String payloadDigest, final String blockDigest,
-      final String truncated, final byte[] content, Metadata meta)
+      final String truncated, final byte[] payload, Content content)
       throws IOException {
     long offset = countingOut.getByteCount();
     URI recordId = super.writeWarcResponseRecord(targetUri, ip, date, warcinfoId,
-        relatedId, payloadDigest, blockDigest, truncated, content, meta);
+        relatedId, payloadDigest, blockDigest, truncated, payload, content);
     long length = (countingOut.getByteCount() - offset);
-    writeCdxLine(targetUri, date, offset, length, payloadDigest, meta);
+    writeCdxLine(targetUri, date, offset, length, payloadDigest, content);
     return recordId;
   }
 
   public void writeCdxLine(final URI targetUri, final Date date, long offset,
-      long length, String payloadDigest, Metadata meta) throws IOException {
+      long length, String payloadDigest, Content content) throws IOException {
     String url = targetUri.toString();
     String surt = url;
     try {
@@ -104,8 +104,9 @@ public class WarcCdxWriter extends WarcWriter {
     cdxOut.write(' ');
     Map<String, String> data = new LinkedHashMap<String, String>();
     data.put("url", url);
-    data.put("mime", cleanMimeType(meta.get("Content-Type")));
-    data.put("status", meta.get("HTTP-Status-Code"));
+    data.put("mime", cleanMimeType(content.getMetadata().get("Content-Type")));
+    data.put("mime-detected", content.getContentType());
+    data.put("status", content.getMetadata().get("HTTP-Status-Code"));
     data.put("digest", payloadDigest);
     data.put("length", String.format("%d", length));
     data.put("offset", String.format("%d", offset));
