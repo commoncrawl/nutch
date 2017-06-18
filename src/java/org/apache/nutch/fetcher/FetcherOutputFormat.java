@@ -41,6 +41,8 @@ import org.apache.hadoop.util.Progressable;
 import org.apache.nutch.parse.Parse;
 import org.apache.nutch.parse.ParseOutputFormat;
 import org.apache.nutch.protocol.Content;
+import org.commoncrawl.warc.WarcCompleteData;
+import org.commoncrawl.warc.WarcOutputFormat;
 
 /** Splits FetcherOutput entries into multiple map files. */
 public class FetcherOutputFormat implements OutputFormat<Text, NutchWritable> {
@@ -78,6 +80,7 @@ public class FetcherOutputFormat implements OutputFormat<Text, NutchWritable> {
     return new RecordWriter<Text, NutchWritable>() {
         private MapFile.Writer contentOut;
         private RecordWriter<Text, Parse> parseOut;
+        private org.apache.hadoop.mapreduce.RecordWriter<Text, WarcCompleteData> warcOut;
 
         {
           if (Fetcher.isStoringContent(job)) {
@@ -88,6 +91,12 @@ public class FetcherOutputFormat implements OutputFormat<Text, NutchWritable> {
 
           if (Fetcher.isParsing(job)) {
             parseOut = new ParseOutputFormat().getRecordWriter(fs, job, name, progress);
+          }
+
+          if (true) { // TODO: writeWarc
+          Path warc = new Path(
+              new Path(FileOutputFormat.getOutputPath(job), "warc"), name);
+            warcOut = new WarcOutputFormat().getRecordWriter(job, warc);
           }
         }
 
@@ -102,6 +111,11 @@ public class FetcherOutputFormat implements OutputFormat<Text, NutchWritable> {
             contentOut.append(key, w);
           else if (w instanceof Parse && parseOut != null)
             parseOut.write(key, (Parse)w);
+          else if (w instanceof WarcCompleteData) {
+            try {
+              warcOut.write(key, (WarcCompleteData) w);
+            } catch (InterruptedException e) {}
+          }
         }
 
         public void close(Reporter reporter) throws IOException {
@@ -111,6 +125,11 @@ public class FetcherOutputFormat implements OutputFormat<Text, NutchWritable> {
           }
           if (parseOut != null) {
             parseOut.close(reporter);
+          }
+          if (warcOut != null) {
+            try {
+              warcOut.close(null);
+            } catch (InterruptedException e) {}
           }
         }
 
