@@ -53,6 +53,7 @@ import org.apache.nutch.parse.*;
 import org.apache.nutch.scoring.ScoringFilterException;
 import org.apache.nutch.scoring.ScoringFilters;
 import org.apache.nutch.util.*;
+import org.commoncrawl.warc.WarcCompleteData;
 
 import crawlercommons.robots.BaseRobotRules;
 
@@ -133,6 +134,8 @@ public class Fetcher extends Configured implements Tool,
 
   private boolean storingContent;
   private boolean parsing;
+  private boolean storingWarc;
+  private boolean storing404s;
   FetchItemQueues fetchQueues;
   QueueFeeder feeder;
   Cache cache;
@@ -675,6 +678,8 @@ public class Fetcher extends Configured implements Tool,
       outlinksIgnoreExternal = conf.getBoolean("fetcher.follow.outlinks.ignore.external", false);
       maxOutlinkDepthNumLinks = conf.getInt("fetcher.follow.outlinks.num.links", 4);
       outlinksDepthDivisor = conf.getInt("fetcher.follow.outlinks.depth.divisor", 2);
+      storingWarc = conf.getBoolean("fetcher.store.warc", false);
+      storing404s = conf.getBoolean("fetcher.store.404s", false);
 
       if (conf.getBoolean("fetcher.store.robotstxt", false)) {
         robotsTxtContent = new LinkedList<Content>();
@@ -745,8 +750,12 @@ public class Fetcher extends Configured implements Tool,
                 for (Content robotsTxt : robotsTxtContent) {
                   LOG.debug("fetched and stored robots.txt {}",
                       robotsTxt.getUrl());
-                  output.collect(new Text(robotsTxt.getUrl()),
-                      new NutchWritable(robotsTxt));
+                  Text tUrl = new Text(robotsTxt.getUrl());
+                  output.collect(tUrl, new NutchWritable(robotsTxt));
+                  if (storingWarc) {
+                    output.collect(tUrl, new NutchWritable(
+                        new WarcCompleteData(tUrl, null, robotsTxt)));
+                  }
                 }
                 robotsTxtContent.clear();
               }
@@ -894,7 +903,8 @@ public class Fetcher extends Configured implements Tool,
                 /* FALLTHROUGH */
               case ProtocolStatus.RETRY:          // retry
               case ProtocolStatus.BLOCKED:
-                output(fit.url, fit.datum, null, status, CrawlDatum.STATUS_FETCH_RETRY);
+                output(fit.url, fit.datum, (storing404s ? content : null),
+                    status, CrawlDatum.STATUS_FETCH_RETRY);
                 break;
 
               case ProtocolStatus.GONE:           // gone
@@ -902,19 +912,22 @@ public class Fetcher extends Configured implements Tool,
               case ProtocolStatus.ACCESS_DENIED:
               	updateStatus(0);
               case ProtocolStatus.ROBOTS_DENIED:
-                output(fit.url, fit.datum, null, status, CrawlDatum.STATUS_FETCH_GONE);
+                output(fit.url, fit.datum, (storing404s ? content : null),
+                    status, CrawlDatum.STATUS_FETCH_GONE);
                 break;
 
               case ProtocolStatus.NOTMODIFIED:
             	updateStatus(0);
-                output(fit.url, fit.datum, null, status, CrawlDatum.STATUS_FETCH_NOTMODIFIED);
+                output(fit.url, fit.datum, (storing404s ? content : null),
+                    status, CrawlDatum.STATUS_FETCH_NOTMODIFIED);
                 break;
 
               default:
                 if (LOG.isWarnEnabled()) {
                   LOG.warn("Unknown ProtocolStatus: " + status.getCode());
                 }
-                output(fit.url, fit.datum, null, status, CrawlDatum.STATUS_FETCH_RETRY);
+                output(fit.url, fit.datum, (storing404s ? content : null),
+                    status, CrawlDatum.STATUS_FETCH_RETRY);
               }
 
               if (redirecting && redirectCount > maxRedirect) {
@@ -1074,6 +1087,10 @@ public class Fetcher extends Configured implements Tool,
         output.collect(key, new NutchWritable(datum));
         if (content != null && storingContent)
           output.collect(key, new NutchWritable(content));
+        if (storingWarc) {
+          WarcCompleteData warcData = new WarcCompleteData(key, datum, content);
+          output.collect(key, new NutchWritable(warcData));
+        }
         if (parseResult != null) {
           for (Entry<Text, Parse> entry : parseResult) {
             Text url = entry.getKey();

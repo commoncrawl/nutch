@@ -878,6 +878,21 @@
   </description>
 </property>
 
+<property>
+  <name>fetcher.store.404s</name>
+  <value>false</value>
+  <description>If true, fetcher will also store the content of 404s and other non-successful responses
+  for debugging or archival purposes.
+  </description>
+</property>
+
+<property>
+  <name>fetcher.store.warc</name>
+  <value>false</value>
+  <description>If true, fetcher will write WARC files.
+  </description>
+</property>
+
 <!-- moreindexingfilter plugin properties -->
 
 <property>
