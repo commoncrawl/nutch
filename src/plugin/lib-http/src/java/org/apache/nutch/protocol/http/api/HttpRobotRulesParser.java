@@ -109,7 +109,7 @@ public class HttpRobotRulesParser extends RobotRulesParser {
             
             response = ((HttpBase)http).getResponse(redir, new CrawlDatum(), true);
             if (robotsTxtContent != null) {
-              addRobotsContent(robotsTxtContent, robotsUrl, response);
+              addRobotsContent(robotsTxtContent, redir, response);
             }
           }
         }
