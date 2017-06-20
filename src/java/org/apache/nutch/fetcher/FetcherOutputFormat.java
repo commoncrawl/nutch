@@ -18,6 +18,10 @@
 package org.apache.nutch.fetcher;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 
 import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.nutch.crawl.NutchWritable;
@@ -43,6 +47,7 @@ import org.apache.nutch.parse.ParseOutputFormat;
 import org.apache.nutch.protocol.Content;
 import org.commoncrawl.warc.WarcCompleteData;
 import org.commoncrawl.warc.WarcOutputFormat;
+
 
 /** Splits FetcherOutput entries into multiple map files. */
 public class FetcherOutputFormat implements OutputFormat<Text, NutchWritable> {
@@ -93,9 +98,24 @@ public class FetcherOutputFormat implements OutputFormat<Text, NutchWritable> {
             parseOut = new ParseOutputFormat().getRecordWriter(fs, job, name, progress);
           }
 
-          if (true) { // TODO: writeWarc
-          Path warc = new Path(
-              new Path(FileOutputFormat.getOutputPath(job), "warc"), name);
+          if (Fetcher.isStoringWarc(job)) {
+            Path warc = new Path(
+                new Path(FileOutputFormat.getOutputPath(job), "warc"), name);
+            // set start and end time of WARC capture
+            long timelimit = job.getLong("fetcher.timelimit", -1);
+            long timelimitMins = job.getLong("fetcher.timelimit.mins", -1);
+            long startTime = System.currentTimeMillis();
+            long endTime = System.currentTimeMillis();
+            if (timelimitMins > 0) {
+                startTime = timelimit - (timelimitMins * 60 * 1000);
+                if (endTime > timelimit) {
+                  endTime = timelimit;
+                }
+            }
+            SimpleDateFormat fileDate = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
+            fileDate.setTimeZone(TimeZone.getTimeZone("GMT"));
+            job.set("warc.export.date", fileDate.format(new Date(startTime)));
+            job.set("warc.export.date.end", fileDate.format(new Date(endTime)));
             warcOut = new WarcOutputFormat().getRecordWriter(job, warc);
           }
         }
