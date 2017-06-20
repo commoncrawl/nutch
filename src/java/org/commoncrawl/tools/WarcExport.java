@@ -109,15 +109,6 @@ public class WarcExport extends Configured implements Tool {
   public static class CrawlDatumCombinedInputFormat extends CombineSequenceFileInputFormat<Text, CrawlDatum> {
   }
 
-  public String getHostname() {
-    try {
-      return InetAddress.getLocalHost().getHostName();
-    } catch (UnknownHostException e) {
-      LOG.warn("Failed to get hostname: {}", e.getMessage());
-    }
-    return "localhost";
-  }
-
   public void export(Path outputDir, List<Path> segments,
       boolean generateCrawlDiagnostics, boolean generateRobotsTxt, Path cdxPath)
       throws IOException {
@@ -125,7 +116,6 @@ public class WarcExport extends Configured implements Tool {
 
     // We compress ourselves, so this isn't necessary
     conf.setBoolean(org.apache.hadoop.mapreduce.lib.output.FileOutputFormat.COMPRESS, false);
-    conf.set("warc.export.hostname", getHostname());
 
     conf.setBoolean("warc.export.crawldiagnostics", generateCrawlDiagnostics);
     conf.setBoolean("warc.export.robotstxt", generateRobotsTxt);

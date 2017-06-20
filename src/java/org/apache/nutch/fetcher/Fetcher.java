@@ -678,7 +678,6 @@ public class Fetcher extends Configured implements Tool,
       outlinksIgnoreExternal = conf.getBoolean("fetcher.follow.outlinks.ignore.external", false);
       maxOutlinkDepthNumLinks = conf.getInt("fetcher.follow.outlinks.num.links", 4);
       outlinksDepthDivisor = conf.getInt("fetcher.follow.outlinks.depth.divisor", 2);
-      storingWarc = conf.getBoolean("fetcher.store.warc", false);
       storing404s = conf.getBoolean("fetcher.store.404s", false);
 
       if (conf.getBoolean("fetcher.store.robotstxt", false)) {
@@ -1253,6 +1252,7 @@ public class Fetcher extends Configured implements Tool,
     this.segmentName = job.get(Nutch.SEGMENT_NAME_KEY);
     this.storingContent = isStoringContent(job);
     this.parsing = isParsing(job);
+    this.storingWarc = isStoringWarc(job);
 
 //    if (job.getBoolean("fetcher.verbose", false)) {
 //      LOG.setLevel(Level.FINE);
@@ -1267,6 +1267,10 @@ public class Fetcher extends Configured implements Tool,
 
   public static boolean isStoringContent(Configuration conf) {
     return conf.getBoolean("fetcher.store.content", true);
+  }
+
+  public static boolean isStoringWarc(Configuration conf) {
+    return conf.getBoolean("fetcher.store.warc", true);
   }
 
   public void run(RecordReader<Text, CrawlDatum> input,

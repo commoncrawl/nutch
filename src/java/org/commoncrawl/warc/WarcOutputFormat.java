@@ -3,8 +3,10 @@ package org.commoncrawl.warc;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -69,19 +71,22 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCompleteData> {
     private boolean generateCrawlDiagnostics;
     private boolean generateRobotsTxt;
     private boolean generateCdx;
+    private String lastURL = ""; // for deduplication
+    private boolean deduplicate;
 
     public WarcRecordWriter(Configuration conf, Path outputPath,
-        String filename, String hostname,
-        String publisher, String operator, String software, String isPartOf,
-        String description,
+        String filename, String hostname, String publisher, String operator,
+        String software, String isPartOf, String description,
         boolean generateCrawlDiagnostics, boolean generateRobotsTxt,
-        boolean generateCdx, Path cdxPath, Date captureStartDate)
-        throws IOException {
+        boolean generateCdx, Path cdxPath, Date captureStartDate,
+        boolean deduplicate) throws IOException {
 
       FileSystem fs = outputPath.getFileSystem(conf);
 
       Path warcPath = new Path(new Path(outputPath, "warc"), filename);
       warcOut = fs.create(warcPath);
+
+      this.deduplicate = deduplicate;
 
       this.generateCdx = generateCdx;
       if (generateCdx) {
@@ -169,8 +174,9 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCompleteData> {
     public synchronized void write(Text key, WarcCompleteData value) throws IOException {
       URI targetUri;
 
+      String url = value.url.toString();
       try {
-        targetUri = new URI(value.url.toString());
+        targetUri = new URI(url);
       } catch (URISyntaxException e) {
         LOG.error("Cannot write WARC record, invalid URI: {}", value.url);
         return;
@@ -179,6 +185,14 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCompleteData> {
       if (value.content == null) {
         LOG.warn("Cannot write WARC record, no content for {}", value.url);
         return;
+      }
+
+      if (deduplicate) {
+        if (lastURL.equals(url)) {
+          LOG.info("Skipping duplicate record: {}", value.url);
+          return;
+        }
+        lastURL = url;
       }
 
       String ip = "0.0.0.0";
@@ -456,7 +470,7 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCompleteData> {
           e.getMessage());
     }
 
-    String hostname = conf.get("warc.export.hostname", "localhost");
+    String hostname = conf.get("warc.export.hostname", getHostname());
     String publisher = conf.get("warc.export.publisher", null);
     String operator = conf.get("warc.export.operator", null);
     String software = conf.get("warc.export.software", null);
@@ -465,6 +479,7 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCompleteData> {
     boolean generateCrawlDiagnostics = conf.getBoolean("warc.export.crawldiagnostics", false);
     boolean generateRobotsTxt = conf.getBoolean("warc.export.robotstxt", false);
     boolean generateCdx= conf.getBoolean("warc.export.cdx", false);
+    boolean deduplicate = conf.getBoolean("warc.deduplicate", false);
 
     // WARC recommends - Prefix-Timestamp-Serial-Crawlhost.warc.gz
     //   https://github.com/iipc/warc-specifications/blob/gh-pages/specifications/warc-format/warc-1.1/index.md#annex-b-informative-warc-file-size-and-name-recommendations
@@ -482,7 +497,7 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCompleteData> {
 
     return new WarcRecordWriter(conf, outputPath, filename, hostname, publisher,
         operator, software, isPartOf, description, generateCrawlDiagnostics,
-        generateRobotsTxt, generateCdx, cdxPath, captureStartDate);
+        generateRobotsTxt, generateCdx, cdxPath, captureStartDate, deduplicate);
   }
 
   @Override
@@ -512,4 +527,14 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCompleteData> {
     TokenCache.obtainTokensForNamenodes(job.getCredentials(),
         new Path[] { outDir }, job.getConfiguration());
   }
+
+  public String getHostname() {
+    try {
+      return InetAddress.getLocalHost().getHostName();
+    } catch (UnknownHostException e) {
+      LOG.warn("Failed to get hostname: {}", e.getMessage());
+    }
+    return "localhost";
+  }
+
 }
