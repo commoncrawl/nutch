@@ -37,6 +37,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapred.lib.MultithreadedMapRunner;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
@@ -707,6 +708,7 @@ public class SitemapInjector extends Injector {
     sortJob.setJobName("inject " + urlDir);
     FileInputFormat.addInputPath(sortJob, urlDir);
     sortJob.setMapperClass(SitemapInjectMapper.class);
+    sortJob.setMapRunnerClass(MultithreadedMapRunner.class);
 
     FileOutputFormat.setOutputPath(sortJob, tempDir);
     sortJob.setOutputFormat(SequenceFileOutputFormat.class);
