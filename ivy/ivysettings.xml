@@ -51,12 +51,12 @@
       pattern="${maven2.pattern.ext}"
       m2compatible="true"
       />
-   <ibiblio name="maven-hadoop"
+    <ibiblio name="maven-hadoop"
       root="https://repository.cloudera.com/content/repositories/releases/"
       pattern="${maven2.pattern.ext}"
       m2compatible="true"
       />
-   <ibiblio name="cloudera-repos"
+    <ibiblio name="cloudera-repos"
       root="https://repository.cloudera.com/artifactory/cloudera-repos/"
       pattern="${maven2.pattern.ext}"
       m2compatible="true"
@@ -80,6 +80,10 @@
     <chain name="internal">
       <resolver ref="local"/>
     </chain>
+    <chain name="internal-and-maven">
+      <resolver ref="local"/>
+      <resolver ref="maven2-local"/>
+    </chain>
     <chain name="external">
       <resolver ref="maven2"/>
     </chain>
@@ -95,6 +99,6 @@
     rather than look for them online.
     -->
     <module organisation="org.apache.nutch" name=".*" resolver="internal"/>
-    <module organisation="org.commoncrawl" name=".*" resolver="internal"/>
+    <module organisation="org.commoncrawl" name=".*" resolver="internal-and-maven"/>
   </modules>
 </ivysettings>
