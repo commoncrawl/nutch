@@ -22,6 +22,7 @@ import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -323,6 +324,19 @@ public class SitemapInjector extends Injector {
       }
     }
 
+    class ScoredSitemap implements Comparable<ScoredSitemap> {
+      double score;
+      AbstractSiteMap sitemap;
+      public ScoredSitemap(double score, AbstractSiteMap sitemap) {
+        this.score = score;
+        this.sitemap = sitemap;
+      }
+      @Override
+      public int compareTo(ScoredSitemap other) {
+        return Double.compare(other.score, this.score);
+      }
+    }
+
     private Content getContent(String url, Reporter reporter) {
       Protocol protocol = null;
       try {
@@ -445,8 +459,17 @@ public class SitemapInjector extends Injector {
           processedSitemaps.add(sitemap.getUrl().toString());
         }
 
+        // choose subsitemaps randomly with a preference for elements in front
+        PriorityQueue<ScoredSitemap> sitemaps = new PriorityQueue<>();
+        int subSitemaps = 0;
+        for (AbstractSiteMap s : sitemapIndex.getSitemaps()) {
+          subSitemaps++;
+          double score = (1.0/subSitemaps) + Math.random();
+          sitemaps.add(new ScoredSitemap(score, s));
+        }
+
         int failedSubSitemaps = 0;
-        while (sitemapIndex.hasUnprocessedSitemap()) {
+        while (sitemaps.size() > 0) {
 
           long elapsed = (System.currentTimeMillis()-startTime)/1000;
           if (elapsed > maxSitemapProcessingTime) {
@@ -480,7 +503,7 @@ public class SitemapInjector extends Injector {
             return;
           }
 
-          AbstractSiteMap nextSitemap = sitemapIndex.nextUnprocessedSitemap();
+          AbstractSiteMap nextSitemap = sitemaps.poll().sitemap;
           reporter.getCounter("SitemapInjector", "sitemap indexes processed").increment(1);
 
           String url = nextSitemap.getUrl().toString();
@@ -509,7 +532,6 @@ public class SitemapInjector extends Injector {
 
           Content content = getContent(url, reporter);
           if (content == null) {
-            sitemapIndex.getSitemaps().remove(nextSitemap);
             nextSitemap.setProcessed(true);
             reporter.getCounter("SitemapInjector", "sitemaps failed to fetch")
                 .increment(1);
