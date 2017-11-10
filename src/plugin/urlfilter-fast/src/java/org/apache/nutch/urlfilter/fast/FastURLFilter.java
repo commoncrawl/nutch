@@ -143,7 +143,11 @@ public class FastURLFilter implements URLFilter {
           Rule rule = null;
           try {
             if (line.startsWith("DenyPath ")) {
-              rule = new DenyPathRule(line.split("\\s")[1]);
+              if (line.equals("DenyPath .*")) {
+                rule = DenyPathEntirelyRule.getInstance();
+              } else {
+                rule = new DenyPathRule(line.split("\\s")[1]);
+              }
             } else if (line.startsWith("DenyPathQuery ")) {
               rule = new DenyPathQueryRule(line.split("\\s")[1]);
             } else {
@@ -197,6 +201,23 @@ public class FastURLFilter implements URLFilter {
       }
 
       return pattern.matcher(haystack).find();
+    }
+  }
+
+  /** Rule for &quot;DenyPath .*&quot; */
+  public static class DenyPathEntirelyRule extends Rule {
+
+    private static Rule instance = new DenyPathEntirelyRule(".*");
+
+    private DenyPathEntirelyRule(String pattern) {
+    }
+
+    public static Rule getInstance() {
+      return instance;
+    }
+
+    public boolean match(URI uri) {
+      return true;
     }
   }
 
