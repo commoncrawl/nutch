@@ -69,7 +69,6 @@ import crawlercommons.sitemaps.AbstractSiteMap;
 import crawlercommons.sitemaps.SiteMap;
 import crawlercommons.sitemaps.SiteMapIndex;
 import crawlercommons.sitemaps.SiteMapParser;
-import crawlercommons.sitemaps.SiteMapParserSAX;
 import crawlercommons.sitemaps.SiteMapURL;
 
 
@@ -162,7 +161,7 @@ public class SitemapInjector extends Injector {
       // strict = true : do not allow
       // TODO: need to pass a set of cross-submit allowed hosts
       boolean strict = jobConf.getBoolean("db.injector.sitemap.strict", false);
-      sitemapParser = new SiteMapParserSAX(strict, true);
+      sitemapParser = new SiteMapParser(strict, true);
 
       maxRecursiveSitemaps = jobConf.getInt("db.injector.sitemap.index_max_size", 50001);
       maxRecursiveUrlsPerSitemapIndex = jobConf.getLong(SITEMAP_MAX_URLS, 50000L * 50000);
