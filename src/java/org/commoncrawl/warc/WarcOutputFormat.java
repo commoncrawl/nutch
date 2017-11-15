@@ -350,6 +350,7 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCompleteData> {
       }
 
       if (notModified) {
+        LOG.warn("Revisit records not supported: {}", key);
         /*
         writer.writeWarcRevisitRecord(targetUri, ip, date, infoId, requestId,
             WarcWriter.PROFILE_REVISIT_NOT_MODIFIED, payloadDigest, abbreviatedResponse, abbreviatedResponseLength);
