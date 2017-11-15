@@ -18,10 +18,13 @@
 package org.apache.nutch.crawl;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
@@ -146,10 +149,12 @@ public class SitemapInjector extends Injector {
     protected int maxUrlLength = 512;
 
     protected boolean checkRobotsTxt = true;
+    protected int maxFailuresPerHost = 5;
 
     private ProtocolFactory protocolFactory;
     private SiteMapParser sitemapParser;
     private ExecutorService executorService;
+    private Map<String,Integer> failuresPerHost = new HashMap<>();
     
     public void configure(JobConf job) {
       super.configure(job);
@@ -176,6 +181,7 @@ public class SitemapInjector extends Injector {
       if ((taskTimeout * .8) < maxSitemapProcessingTime) {
         maxSitemapProcessingTime = (int) (taskTimeout * .8);
       }
+      maxFailuresPerHost = jobConf.getInt("db.injector.sitemap.max.fetch.failures.per.host", 5);
 
       // fetch intervals defined in sitemap should within the defined range
       minInterval = jobConf.getFloat("db.fetch.schedule.adaptive.min_interval", 60);
@@ -336,7 +342,29 @@ public class SitemapInjector extends Injector {
       }
     }
 
+    private void incrementFailuresPerHost(String hostName) {
+      int failures = 1;
+      if (failuresPerHost.containsKey(hostName)) {
+        failures += failuresPerHost.get(hostName);
+      }
+      failuresPerHost.put(hostName, failures);
+    }
+
     private Content getContent(String url, Reporter reporter) {
+      String hostName;
+      try {
+        hostName = new URL(url).getHost();
+      } catch (MalformedURLException e1) {
+        return null;
+      }
+      if (failuresPerHost.containsKey(hostName)
+          && failuresPerHost.get(hostName) > maxFailuresPerHost) {
+        LOG.info("Skipped, too many failures per host: {}", url);
+        reporter
+          .getCounter("SitemapInjector", "skipped, too many failures per host")
+          .increment(1);
+        return null;
+      }
       Protocol protocol = null;
       try {
         protocol = protocolFactory.getProtocol(url);
@@ -366,6 +394,7 @@ public class SitemapInjector extends Injector {
               "failed to fetch sitemap content, exception").increment(1);
         }
         task.cancel(true);
+        incrementFailuresPerHost(hostName);
         return null;
       } finally {
         fetch = null;
@@ -381,6 +410,7 @@ public class SitemapInjector extends Injector {
         reporter
           .getCounter("SitemapInjector", "failed to fetch sitemap content, HTTP status != 200")
           .increment(1);
+        incrementFailuresPerHost(hostName);
         return null;
       }
       Content content = protocolOutput.getContent();
@@ -390,6 +420,7 @@ public class SitemapInjector extends Injector {
         reporter
           .getCounter("SitemapInjector", "failed to fetch sitemap content, empty content")
           .increment(1);
+        incrementFailuresPerHost(hostName);
         return null;
       }
       return content;
