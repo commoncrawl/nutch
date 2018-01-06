@@ -61,7 +61,7 @@
 			<exclude org="ant" name="ant" />
 		</dependency>
 
-		<dependency org="org.apache.tika" name="tika-core" rev="1.16" />
+		<dependency org="org.apache.tika" name="tika-core" rev="1.17" />
 		<dependency org="com.ibm.icu" name="icu4j" rev="4.0.1" />
 
 		<dependency org="org.mortbay.jetty" name="jetty-client"
@@ -75,7 +75,9 @@
 
 		<dependency org="com.google.guava" name="guava" rev="11.0.2" />
 
-		<dependency org="com.github.crawler-commons" name="crawler-commons" rev="0.9" />
+		<dependency org="com.github.crawler-commons" name="crawler-commons" rev="0.9">
+			<exclude org="org.apache.tika"/>
+		</dependency>
 
 		<dependency org="commons-codec" name="commons-codec" rev="1.8" />
 
