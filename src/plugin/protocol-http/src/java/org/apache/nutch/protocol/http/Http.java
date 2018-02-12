@@ -17,6 +17,7 @@
 package org.apache.nutch.protocol.http;
 
 // JDK imports
+import java.lang.invoke.MethodHandles;
 import java.io.IOException;
 import java.net.URL;
 
@@ -34,23 +35,30 @@ import org.apache.nutch.protocol.ProtocolException;
 import org.apache.nutch.protocol.http.api.HttpBase;
 import org.apache.nutch.util.NutchConfiguration;
 
-
 public class Http extends HttpBase {
 
-  public static final Logger LOG = LoggerFactory.getLogger(Http.class);
+  protected static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
-
+  /**
+   * Public default constructor.
+   */
   public Http() {
     super(LOG);
   }
 
+  /**
+   * Set the {@link org.apache.hadoop.conf.Configuration} object.
+   * 
+   * @param conf
+   */
   public void setConf(Configuration conf) {
     super.setConf(conf);
-//    Level logLevel = Level.WARNING;
-//    if (conf.getBoolean("http.verbose", false)) {
-//      logLevel = Level.FINE;
-//    }
-//    LOG.setLevel(logLevel);
+    // Level logLevel = Level.WARNING;
+    // if (conf.getBoolean("http.verbose", false)) {
+    // logLevel = Level.FINE;
+    // }
+    // LOG.setLevel(logLevel);
   }
 
   public static void main(String[] args) throws Exception {
@@ -60,7 +68,7 @@ public class Http extends HttpBase {
   }
 
   protected Response getResponse(URL url, CrawlDatum datum, boolean redirect)
-    throws ProtocolException, IOException {
+      throws ProtocolException, IOException {
     return new HttpResponse(this, url, datum);
   }
 

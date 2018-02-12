@@ -17,6 +17,7 @@
 
 package org.apache.nutch.protocol.http.api;
 
+import java.lang.invoke.MethodHandles;
 import java.net.URL;
 import java.util.List;
 
@@ -33,23 +34,45 @@ import org.apache.nutch.protocol.Protocol;
 import org.apache.nutch.protocol.RobotRulesParser;
 
 import crawlercommons.robots.BaseRobotRules;
-import crawlercommons.robots.SimpleRobotRules;
 
 /**
- * This class is used for parsing robots for urls belonging to HTTP protocol.
- * It extends the generic {@link RobotRulesParser} class and contains 
- * Http protocol specific implementation for obtaining the robots file.
+ * This class is used for parsing robots for urls belonging to HTTP protocol. It
+ * extends the generic {@link RobotRulesParser} class and contains Http protocol
+ * specific implementation for obtaining the robots file.
  */
 public class HttpRobotRulesParser extends RobotRulesParser {
-  
-  public static final Logger LOG = LoggerFactory.getLogger(HttpRobotRulesParser.class);
+
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
   protected boolean allowForbidden = false;
 
-  HttpRobotRulesParser() { }
+  HttpRobotRulesParser() {
+  }
 
   public HttpRobotRulesParser(Configuration conf) {
-    super(conf);
-    allowForbidden = conf.getBoolean("http.robots.403.allow", false);
+    setConf(conf);
+  }
+
+  public void setConf(Configuration conf) {
+    super.setConf(conf);
+    allowForbidden = conf.getBoolean("http.robots.403.allow", true);
+  }
+
+  /** Compose unique key to store and access robot rules in cache for given URL */
+  protected static String getCacheKey(URL url) {
+    String protocol = url.getProtocol().toLowerCase(); // normalize to lower
+                                                       // case
+    String host = url.getHost().toLowerCase(); // normalize to lower case
+    int port = url.getPort();
+    if (port == -1) {
+      port = url.getDefaultPort();
+    }
+    /*
+     * Robot rules apply only to host, protocol, and port where robots.txt is
+     * hosted (cf. NUTCH-1752). Consequently
+     */
+    String cacheKey = protocol + ":" + host + ":" + port;
+    return cacheKey;
   }
 
   /**
@@ -72,80 +95,93 @@ public class HttpRobotRulesParser extends RobotRulesParser {
    *
    * @return robotRules A {@link BaseRobotRules} object for the rules
    */
+  @Override
   public BaseRobotRules getRobotRulesSet(Protocol http, URL url,
       List<Content> robotsTxtContent) {
 
-    String protocol = url.getProtocol().toLowerCase();  // normalize to lower case
-    String host = url.getHost().toLowerCase();          // normalize to lower case
+    String cacheKey = getCacheKey(url);
+    BaseRobotRules robotRules = CACHE.get(cacheKey);
 
-    BaseRobotRules robotRules = (SimpleRobotRules)CACHE.get(protocol + ":" + host);
+    if (robotRules != null) {
+      return robotRules; // cached rule
+    } else if (LOG.isTraceEnabled()) {
+      LOG.trace("cache miss " + url);
+    }
 
     boolean cacheRule = true;
-    
-    if (robotRules == null) {                     // cache miss
-      URL redir = null;
-      if (LOG.isTraceEnabled()) { LOG.trace("cache miss " + url); }
-      try {
-        URL robotsUrl = new URL(url, "/robots.txt");
-        Response response = ((HttpBase) http).getResponse(robotsUrl,
-            new CrawlDatum(), true);
-        if (robotsTxtContent != null) {
-          addRobotsContent(robotsTxtContent, robotsUrl, response);
+    URL redir = null;
+
+    try {
+      URL robotsUrl = new URL(url, "/robots.txt");
+      Response response = ((HttpBase) http).getResponse(robotsUrl,
+          new CrawlDatum(), true);
+      if (robotsTxtContent != null) {
+        addRobotsContent(robotsTxtContent, robotsUrl, response);
+      }
+      // try one level of redirection ?
+      if (response.getCode() == 301 || response.getCode() == 302) {
+        String redirection = response.getHeader("Location");
+        if (redirection == null) {
+          // some versions of MS IIS are known to mangle this header
+          redirection = response.getHeader("location");
         }
-        // try one level of redirection ?
-        if (response.getCode() == 301 || response.getCode() == 302) {
-          String redirection = response.getHeader("Location");
-          if (redirection == null) {
-            // some versions of MS IIS are known to mangle this header
-            redirection = response.getHeader("location");
+        if (redirection != null) {
+          if (!redirection.startsWith("http")) {
+            // RFC says it should be absolute, but apparently it isn't
+            redir = new URL(url, redirection);
+          } else {
+            redir = new URL(redirection);
           }
-          if (redirection != null) {
-            if (!redirection.startsWith("http")) {
-              // RFC says it should be absolute, but apparently it isn't
-              redir = new URL(url, redirection);
-            } else {
-              redir = new URL(redirection);
-            }
-            
-            response = ((HttpBase)http).getResponse(redir, new CrawlDatum(), true);
-            if (robotsTxtContent != null) {
-              addRobotsContent(robotsTxtContent, redir, response);
-            }
+
+          response = ((HttpBase) http).getResponse(redir, new CrawlDatum(),
+              true);
+          if (robotsTxtContent != null) {
+            addRobotsContent(robotsTxtContent, redir, response);
           }
         }
-
-        if (response.getCode() == 200)               // found rules: parse them
-          robotRules =  parseRules(url.toString(), response.getContent(), 
-                                   response.getHeader("Content-Type"), 
-                                   agentNames);
-
-        else if ( (response.getCode() == 403) && (!allowForbidden) )
-          robotRules = FORBID_ALL_RULES;            // use forbid all
-        else if (response.getCode() >= 500) {
-          cacheRule = false;
-          robotRules = EMPTY_RULES;
-        }else                                        
-          robotRules = EMPTY_RULES;                 // use default rules
-      } catch (Throwable t) {
-        if (LOG.isInfoEnabled()) {
-          LOG.info("Couldn't get robots.txt for " + url + ": " + t.toString());
-        }
-        cacheRule = false;
-        robotRules = EMPTY_RULES;
       }
 
-      if (cacheRule) {
-        CACHE.put(protocol + ":" + host, robotRules);  // cache rules for host
-        if (redir != null && !redir.getHost().equals(host)) {
-          // cache also for the redirected host
-          CACHE.put(protocol + ":" + redir.getHost(), robotRules);
-        }
+      if (response.getCode() == 200) // found rules: parse them
+        robotRules = parseRules(url.toString(), response.getContent(),
+            response.getHeader("Content-Type"), agentNames);
+
+      else if ((response.getCode() == 403) && (!allowForbidden))
+        robotRules = FORBID_ALL_RULES; // use forbid all
+      else if (response.getCode() >= 500) {
+        cacheRule = false; // try again later to fetch robots.txt
+        robotRules = EMPTY_RULES;
+      } else
+        robotRules = EMPTY_RULES; // use default rules
+    } catch (Throwable t) {
+      if (LOG.isInfoEnabled()) {
+        LOG.info("Couldn't get robots.txt for " + url + ": " + t.toString());
+      }
+      cacheRule = false; // try again later to fetch robots.txt
+      robotRules = EMPTY_RULES;
+    }
+
+    if (cacheRule) {
+      CACHE.put(cacheKey, robotRules); // cache rules for host
+      if (redir != null && !redir.getHost().equalsIgnoreCase(url.getHost())) {
+        // cache also for the redirected host
+        CACHE.put(getCacheKey(redir), robotRules);
       }
     }
+
     return robotRules;
   }
 
-  private void addRobotsContent(List<Content> robotsTxtContent,
+  /**
+   * Append {@link Content} of robots.txt to {@literal robotsTxtContent}
+   * 
+   * @param robotsTxtContent
+   *          container to store robots.txt response content
+   * @param robotsUrl
+   *          robots.txt URL
+   * @param robotsResponse
+   *          response object to be stored
+   */
+  protected void addRobotsContent(List<Content> robotsTxtContent,
       URL robotsUrl, Response robotsResponse) {
     byte[] robotsBytes = robotsResponse.getContent();
     if (robotsBytes == null)
@@ -158,4 +194,5 @@ public class HttpRobotRulesParser extends RobotRulesParser {
         getConf());
     robotsTxtContent.add(content);
   }
+
 }
