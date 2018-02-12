@@ -59,7 +59,6 @@ import org.apache.nutch.protocol.Protocol;
 import org.apache.nutch.protocol.ProtocolFactory;
 import org.apache.nutch.protocol.ProtocolNotFound;
 import org.apache.nutch.protocol.ProtocolOutput;
-import org.apache.nutch.protocol.ProtocolStatus;
 import org.apache.nutch.scoring.ScoringFilterException;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
@@ -150,6 +149,7 @@ public class SitemapInjector extends Injector {
 
     protected boolean checkRobotsTxt = true;
     protected int maxFailuresPerHost = 5;
+    protected int maxRedirect = 3;
 
     private ProtocolFactory protocolFactory;
     private SiteMapParser sitemapParser;
@@ -182,6 +182,8 @@ public class SitemapInjector extends Injector {
         maxSitemapProcessingTime = (int) (taskTimeout * .8);
       }
       maxFailuresPerHost = jobConf.getInt("db.injector.sitemap.max.fetch.failures.per.host", 5);
+
+      maxRedirect = jobConf.getInt("db.injector.sitemap.max.redirect", 3);
 
       // fetch intervals defined in sitemap should within the defined range
       minInterval = jobConf.getFloat("db.fetch.schedule.adaptive.min_interval", 60);
@@ -351,10 +353,18 @@ public class SitemapInjector extends Injector {
     }
 
     private Content getContent(String url, Reporter reporter) {
+      url = filterNormalize(url);
+      if (url == null) {
+        LOG.warn("Sitemap rejected by URL filters: {}", url);
+        reporter
+            .getCounter("SitemapInjector", "sitemap rejected by URL filters")
+            .increment(1);
+        return null;
+      }
       String hostName;
       try {
         hostName = new URL(url).getHost();
-      } catch (MalformedURLException e1) {
+      } catch (MalformedURLException e) {
         return null;
       }
       if (failuresPerHost.containsKey(hostName)
@@ -377,34 +387,66 @@ public class SitemapInjector extends Injector {
       }
 
       LOG.info("fetching sitemap " + url);
-      FetchSitemapCallable fetch = new FetchSitemapCallable(protocol, url, reporter);
-      Future<ProtocolOutput> task = executorService.submit(fetch);
       ProtocolOutput protocolOutput = null;
-      try {
-        protocolOutput = task.get(maxSitemapFetchTime, TimeUnit.SECONDS);
-      } catch (Exception e) {
-        if (e instanceof TimeoutException) {
-          LOG.error("fetch of sitemap {} timed out", url);
-          reporter.getCounter("SitemapInjector",
-              "failed to fetch sitemap content, timeout").increment(1);
-        } else {
-          LOG.error("fetch of sitemap {} failed with: {}", url,
-              StringUtils.stringifyException(e));
-          reporter.getCounter("SitemapInjector",
-              "failed to fetch sitemap content, exception").increment(1);
+      String origUrl = url;
+      int redirects = 0;
+      do {
+        FetchSitemapCallable fetch = new FetchSitemapCallable(protocol, url,
+            reporter);
+        Future<ProtocolOutput> task = executorService.submit(fetch);
+        try {
+          protocolOutput = task.get(maxSitemapFetchTime, TimeUnit.SECONDS);
+        } catch (Exception e) {
+          if (e instanceof TimeoutException) {
+            LOG.error("fetch of sitemap {} timed out", url);
+            reporter.getCounter("SitemapInjector",
+                "failed to fetch sitemap content, timeout").increment(1);
+          } else {
+            LOG.error("fetch of sitemap {} failed with: {}", url,
+                StringUtils.stringifyException(e));
+            reporter.getCounter("SitemapInjector",
+                "failed to fetch sitemap content, exception").increment(1);
+          }
+          task.cancel(true);
+          incrementFailuresPerHost(hostName);
+          return null;
+        } finally {
+          fetch = null;
         }
-        task.cancel(true);
-        incrementFailuresPerHost(hostName);
-        return null;
-      } finally {
-        fetch = null;
-      }
 
-      if (protocolOutput == null) {
-        return null;
-      }
-      if (ProtocolStatus.STATUS_SUCCESS != protocolOutput.getStatus()) {
-        // TODO: follow redirects
+        if (protocolOutput == null) {
+          return null;
+        }
+
+        if (protocolOutput.getStatus().isRedirect()) {
+          reporter.getCounter("SitemapInjector", "sitemap redirect")
+              .increment(1);
+          url = protocolOutput.getStatus().getArgs()[0];
+          url = filterNormalize(url);
+          if (url == null) {
+            LOG.info(
+                "Redirect target of sitemap {} rejected by URL filters: {}",
+                origUrl, url);
+            reporter
+                .getCounter("SitemapInjector",
+                    "sitemap (redirect target) rejected by URL filters")
+                .increment(1);
+            return null;
+          }
+          redirects++;
+          if (redirects >= maxRedirect) {
+            LOG.warn("sitemap redirect limit exceeded: {}", origUrl);
+            reporter.getCounter("SitemapInjector",
+                "sitemap redirect limit exceeded").increment(1);
+            // return to avoid that exceeded redirects are counted twice
+            // (also as non-success fetch status)
+            return null;
+          }
+        }
+      } while (protocolOutput.getStatus().isRedirect()
+          && redirects < maxRedirect);
+
+      if (!protocolOutput.getStatus().isSuccess()) {
         LOG.error("fetch of sitemap {} failed with status code {}", url,
             protocolOutput.getStatus().getCode());
         reporter
@@ -413,6 +455,7 @@ public class SitemapInjector extends Injector {
         incrementFailuresPerHost(hostName);
         return null;
       }
+
       Content content = protocolOutput.getContent();
       if (content == null) {
         LOG.error("No content for {}, status: {}", url,
@@ -661,8 +704,7 @@ public class SitemapInjector extends Injector {
           continue;
         }
         try {
-          url = urlNormalizers.normalize(url, URLNormalizers.SCOPE_INJECT);
-          url = filters.filter(url);
+          url = filterNormalize(url);
         } catch (Exception e) {
           if (LOG.isWarnEnabled()) {
             LOG.warn("Skipping {}: {}", url, StringUtils.stringifyException(e));
@@ -737,6 +779,18 @@ public class SitemapInjector extends Injector {
         cf = maxInterval;
       }
        return (int) cf;
+    }
+
+    private String filterNormalize(String url) {
+      try {
+        if (urlNormalizers != null)
+          url = urlNormalizers.normalize(url, URLNormalizers.SCOPE_DEFAULT);
+        if (filters != null)
+          url = filters.filter(url);
+      } catch (Exception e) {
+        return null;
+      }
+      return url;
     }
 
   }
