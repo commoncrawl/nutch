@@ -353,6 +353,12 @@ public class SitemapInjector extends Injector {
     }
 
     private Content getContent(String url, Reporter reporter) {
+      if (url.length() > maxUrlLength) {
+        LOG.warn(
+            "Not fetching sitemap with overlong URL: {} ... (truncated, length = {} characters)",
+            url.substring(0, maxUrlLength), url.length());
+        return null;
+      }
       url = filterNormalize(url);
       if (url == null) {
         LOG.warn("Sitemap rejected by URL filters: {}", url);
@@ -391,6 +397,9 @@ public class SitemapInjector extends Injector {
       String origUrl = url;
       int redirects = 0;
       do {
+        if (redirects > 0) {
+          LOG.info("fetching redirected sitemap " + url);
+        }
         FetchSitemapCallable fetch = new FetchSitemapCallable(protocol, url,
             reporter);
         Future<ProtocolOutput> task = executorService.submit(fetch);
@@ -533,11 +542,18 @@ public class SitemapInjector extends Injector {
         }
 
         // choose subsitemaps randomly with a preference for elements in front
+        // and recently published sitemaps
         PriorityQueue<ScoredSitemap> sitemaps = new PriorityQueue<>();
         int subSitemaps = 0;
         for (AbstractSiteMap s : sitemapIndex.getSitemaps()) {
           subSitemaps++;
-          double score = (1.0/subSitemaps) + Math.random();
+          double publishScore = 0.3;
+          if (s.getLastModified() != null) {
+            double elapsedMonthsSincePublished = (System.currentTimeMillis()
+                - s.getLastModified().getTime()) / (1000.0 * 60 * 60 * 24 * 30);
+            publishScore = (1.0 / Math.log(1.0 + elapsedMonthsSincePublished));
+          }
+          double score = (1.0 / subSitemaps) + publishScore + Math.random();
           sitemaps.add(new ScoredSitemap(score, s));
         }
 
