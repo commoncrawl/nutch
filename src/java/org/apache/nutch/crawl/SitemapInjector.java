@@ -167,6 +167,10 @@ public class SitemapInjector extends Injector {
       // TODO: need to pass a set of cross-submit allowed hosts
       boolean strict = jobConf.getBoolean("db.injector.sitemap.strict", false);
       sitemapParser = new SiteMapParser(strict, true);
+      sitemapParser.setStrictNamespace(true);
+      sitemapParser.addAcceptedNamespace(crawlercommons.sitemaps.Namespace.SITEMAP_LEGACY);
+      sitemapParser.addAcceptedNamespace(crawlercommons.sitemaps.Namespace.NEWS);
+      sitemapParser.addAcceptedNamespace(crawlercommons.sitemaps.Namespace.EMPTY);
 
       maxRecursiveSitemaps = jobConf.getInt("db.injector.sitemap.index_max_size", 50001);
       maxRecursiveUrlsPerSitemapIndex = jobConf.getLong(SITEMAP_MAX_URLS, 50000L * 50000);
