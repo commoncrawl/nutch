@@ -75,9 +75,7 @@
 
 		<dependency org="com.google.guava" name="guava" rev="11.0.2" />
 
-		<dependency org="com.github.crawler-commons" name="crawler-commons" rev="0.9">
-			<exclude org="org.apache.tika"/>
-		</dependency>
+		<dependency org="com.github.crawler-commons" name="crawler-commons" rev="0.10-SNAPSHOT" />
 
 		<dependency org="commons-codec" name="commons-codec" rev="1.8" />
 
