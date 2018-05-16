@@ -34,7 +34,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -66,6 +65,7 @@ import org.apache.nutch.util.TimingUtil;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import crawlercommons.domains.EffectiveTldFinder;
 import crawlercommons.robots.BaseRobotRules;
 import crawlercommons.sitemaps.AbstractSiteMap;
 import crawlercommons.sitemaps.SiteMap;
@@ -123,7 +123,7 @@ import crawlercommons.sitemaps.SiteMapURL;
  * <li>no retry scheduling if fetching a sitemap fails</li>
  * <li>be polite and add delays between fetching sitemaps. Usually, there is
  * only one sitemap per host, so this does not matter that much.</li>
- * <li>check for &quot;<a
+ * <li>[done/implemented] check for &quot;<a
  * href="http://www.sitemaps.org/protocol.html#location">cross
  * submits</a>&quot;: if a sitemap URL is explicitly given it is assumed the
  * sitemap's content is trustworthy</li>
@@ -136,18 +136,27 @@ public class SitemapInjector extends Injector {
   public static class SitemapInjectMapper extends InjectMapper {
 
     private static final String SITEMAP_MAX_URLS = "db.injector.sitemap.max_urls";
+    private static final String SITEMAP_MAX_HOSTS = "db.injector.sitemap.max_hosts";
+    private static final String SITEMAP_CROSS_SUBMIT_DOMAINS = "db.injector.sitemap.cross-submit-domains";
 
     protected float minInterval;
     protected float maxInterval;
 
     protected int maxRecursiveSitemaps = 50001;
-    protected long maxRecursiveUrlsPerSitemapIndex = 50000L * 50000;
+    protected long maxUrlsPerSitemapIndex = 50000L * 50000;
+
+    /**
+     * Need a limit on the branching factor, sitemaps from spam hosts may refer
+     * to hundreds of hosts
+     */
+    protected int maxHostsPerSitemapIndex = 100;
 
     protected int maxSitemapFetchTime = 180;
     protected int maxSitemapProcessingTime;
     protected int maxUrlLength = 512;
 
     protected boolean checkRobotsTxt = true;
+    protected boolean checkCrossSubmits = true;
     protected int maxFailuresPerHost = 5;
     protected int maxRedirect = 3;
 
@@ -173,9 +182,11 @@ public class SitemapInjector extends Injector {
       sitemapParser.addAcceptedNamespace(crawlercommons.sitemaps.Namespace.EMPTY);
 
       maxRecursiveSitemaps = jobConf.getInt("db.injector.sitemap.index_max_size", 50001);
-      maxRecursiveUrlsPerSitemapIndex = jobConf.getLong(SITEMAP_MAX_URLS, 50000L * 50000);
+      maxUrlsPerSitemapIndex = jobConf.getLong(SITEMAP_MAX_URLS, 50000L * 50000);
+      maxHostsPerSitemapIndex = jobConf.getInt(SITEMAP_MAX_HOSTS, 100);
 
       checkRobotsTxt = jobConf.getBoolean("db.injector.sitemap.checkrobotstxt", true);
+      checkCrossSubmits = jobConf.getBoolean("db.injector.sitemap.check-cross-submits", true);
 
       // make sure a sitemap is entirely, even recursively processed within 80%
       // of the task timeout, do not start processing a subsitemap if fetch
@@ -221,7 +232,9 @@ public class SitemapInjector extends Injector {
       }
 
       float customScore = 0.0f;
-      long maxUrls = maxRecursiveUrlsPerSitemapIndex;
+      long maxUrls = maxUrlsPerSitemapIndex;
+      int maxHosts = maxHostsPerSitemapIndex;
+      Set<String> crossSubmitDomains = new HashSet<>();
       Metadata customMetadata = new Metadata();
       if (url.contains("\t") || url.contains(" ")){
         String[] splits;
@@ -254,29 +267,29 @@ public class SitemapInjector extends Injector {
               LOG.error("Invalid URL limit for sitemap seed {}: {} - {}",
                   url, metavalue, nfe.getMessage());
             }
+          } else if (metaname.equals(SITEMAP_MAX_HOSTS)) {
+            try {
+              maxHosts = Integer.parseInt(metavalue);
+              LOG.info("Setting max. number of hosts per sitemap for {} = {}",
+                  url, maxHosts);
+            } catch (NumberFormatException nfe) {
+              LOG.error("Invalid host limit for sitemap seed {}: {} - {}",
+                  url, metavalue, nfe.getMessage());
+            }
+          } else if (metaname.equals(SITEMAP_CROSS_SUBMIT_DOMAINS)
+              && checkCrossSubmits) {
+            for (String domain : metavalue.split(",")) {
+              crossSubmitDomains.add(domain);
+            }
           } else {
             customMetadata.add(metaname,metavalue);
           }
         }
       }
-      // distribute site score to outlinks
-      // TODO: should be by real number of outlinks not the maximum allowed
-      customScore /= maxUrls;
 
-      long startTime = System.currentTimeMillis();
-
-      Content content = getContent(url, reporter);
-      if (content == null) {
-        return;
-      }
-
-      try {
-        parseProcessSitemap(content, url, output, reporter, startTime, maxUrls,
-            customScore);
-      } catch (Exception e) {
-        LOG.warn("Failed to process sitemap {}: {}", url,
-            StringUtils.stringifyException(e));
-      }
+      SitemapProcessor sp = new SitemapProcessor(output, reporter, customScore,
+          maxUrls, maxHosts, crossSubmitDomains);
+      sp.process(url);
     }
 
     class FetchSitemapCallable implements Callable<ProtocolOutput> {
@@ -356,406 +369,469 @@ public class SitemapInjector extends Injector {
       failuresPerHost.put(hostName, failures);
     }
 
-    private Content getContent(String url, Reporter reporter) {
-      if (url.length() > maxUrlLength) {
-        LOG.warn(
-            "Not fetching sitemap with overlong URL: {} ... (truncated, length = {} characters)",
-            url.substring(0, maxUrlLength), url.length());
-        return null;
-      }
-      url = filterNormalize(url);
-      if (url == null) {
-        LOG.warn("Sitemap rejected by URL filters: {}", url);
-        reporter
-            .getCounter("SitemapInjector", "sitemap rejected by URL filters")
-            .increment(1);
-        return null;
-      }
-      String hostName;
-      try {
-        hostName = new URL(url).getHost();
-      } catch (MalformedURLException e) {
-        return null;
-      }
-      if (failuresPerHost.containsKey(hostName)
-          && failuresPerHost.get(hostName) > maxFailuresPerHost) {
-        LOG.info("Skipped, too many failures per host: {}", url);
-        reporter
-          .getCounter("SitemapInjector", "skipped, too many failures per host")
-          .increment(1);
-        return null;
-      }
-      Protocol protocol = null;
-      try {
-        protocol = protocolFactory.getProtocol(url);
-      } catch (ProtocolNotFound e) {
-        LOG.error("protocol not found " + url);
-        reporter
-          .getCounter("SitemapInjector", "failed to fetch sitemap content, protocol not found")
-          .increment(1);
-        return null;
+    /** Wrapper for (recursively) fetching and parsing a sitemap */
+    class SitemapProcessor {
+      OutputCollector<Text, CrawlDatum> output;
+      Reporter reporter;
+      float customScore;
+      long maxUrls;
+      int maxHosts;
+
+      long startTime = System.currentTimeMillis();
+      long totalUrls = 0;
+      Set<String> injectedHosts = new HashSet<>();
+      Set<String> crossSubmitDomains;
+
+      public SitemapProcessor(OutputCollector<Text, CrawlDatum> output,
+          Reporter reporter, float customScore, long maxUrls, int maxHosts,
+          Set<String> crossSubmitDomains) {
+        this.output = output;
+        this.reporter = reporter;
+        this.maxUrls = maxUrls;
+        this.maxHosts = maxHosts;
+        this.crossSubmitDomains = crossSubmitDomains;
+
+        // distribute site score to outlinks
+        // TODO: should be by real number of outlinks not the maximum allowed
+        customScore /= maxUrls;
+        this.customScore = customScore;
       }
 
-      LOG.info("fetching sitemap " + url);
-      ProtocolOutput protocolOutput = null;
-      String origUrl = url;
-      int redirects = 0;
-      do {
-        if (redirects > 0) {
-          LOG.info("fetching redirected sitemap " + url);
+      /**
+       * Within limited time: parse and process a sitemap (recursively, in case of
+       * a sitemap index) and inject URLs
+       */
+      public void process(String url) {
+        Content content = getContent(url);
+        if (content == null) {
+          return;
         }
-        FetchSitemapCallable fetch = new FetchSitemapCallable(protocol, url,
-            reporter);
-        Future<ProtocolOutput> task = executorService.submit(fetch);
+
+        AbstractSiteMap sitemap = null;
         try {
-          protocolOutput = task.get(maxSitemapFetchTime, TimeUnit.SECONDS);
+          sitemap = parseSitemap(content, url);
         } catch (Exception e) {
-          if (e instanceof TimeoutException) {
-            LOG.error("fetch of sitemap {} timed out", url);
-            reporter.getCounter("SitemapInjector",
-                "failed to fetch sitemap content, timeout").increment(1);
-          } else {
-            LOG.error("fetch of sitemap {} failed with: {}", url,
-                StringUtils.stringifyException(e));
-            reporter.getCounter("SitemapInjector",
-                "failed to fetch sitemap content, exception").increment(1);
-          }
-          task.cancel(true);
-          incrementFailuresPerHost(hostName);
-          return null;
-        } finally {
-          fetch = null;
-        }
-
-        if (protocolOutput == null) {
-          return null;
-        }
-
-        if (protocolOutput.getStatus().isRedirect()) {
-          reporter.getCounter("SitemapInjector", "sitemap redirect")
-              .increment(1);
-          url = protocolOutput.getStatus().getArgs()[0];
-          url = filterNormalize(url);
-          if (url == null) {
-            LOG.info(
-                "Redirect target of sitemap {} rejected by URL filters: {}",
-                origUrl, url);
-            reporter
-                .getCounter("SitemapInjector",
-                    "sitemap (redirect target) rejected by URL filters")
-                .increment(1);
-            return null;
-          }
-          redirects++;
-          if (redirects >= maxRedirect) {
-            LOG.warn("sitemap redirect limit exceeded: {}", origUrl);
-            reporter.getCounter("SitemapInjector",
-                "sitemap redirect limit exceeded").increment(1);
-            // return to avoid that exceeded redirects are counted twice
-            // (also as non-success fetch status)
-            return null;
-          }
-        }
-      } while (protocolOutput.getStatus().isRedirect()
-          && redirects < maxRedirect);
-
-      if (!protocolOutput.getStatus().isSuccess()) {
-        LOG.error("fetch of sitemap {} failed with status code {}", url,
-            protocolOutput.getStatus().getCode());
-        reporter
-          .getCounter("SitemapInjector", "failed to fetch sitemap content, HTTP status != 200")
-          .increment(1);
-        incrementFailuresPerHost(hostName);
-        return null;
-      }
-
-      Content content = protocolOutput.getContent();
-      if (content == null) {
-        LOG.error("No content for {}, status: {}", url,
-            protocolOutput.getStatus().getMessage());
-        reporter
-          .getCounter("SitemapInjector", "failed to fetch sitemap content, empty content")
-          .increment(1);
-        incrementFailuresPerHost(hostName);
-        return null;
-      }
-      return content;
-    }
-
-    private AbstractSiteMap parseSitemap(Content content, Object urlOrSitemap)
-        throws Exception {
-      ParseSitemapCallable parse = new ParseSitemapCallable(content,
-          urlOrSitemap);
-      Future<AbstractSiteMap> task = executorService.submit(parse);
-      AbstractSiteMap sitemap = null;
-      try {
-        // not a recursive task, should be fast
-        sitemap = task.get(maxSitemapProcessingTime/20, TimeUnit.SECONDS);
-      } finally {
-        parse = null;
-      }
-      return sitemap;
-    }
-
-    /**
-     * Within limited time: parse and process a sitemap (recursively, in case of
-     * a sitemap index) and inject URLs
-     */
-    private void parseProcessSitemap(Content content, String url,
-        OutputCollector<Text, CrawlDatum> output, Reporter reporter,
-        final long startTime, final long maxUrls, final float customScore) {
-
-      AbstractSiteMap sitemap = null;
-      try {
-        sitemap = parseSitemap(content, url);
-      } catch (Exception e) {
-        reporter.getCounter("SitemapInjector", "sitemaps failed to parse").increment(1);
-        LOG.warn("failed to parse sitemap {}: {}", url,
-            StringUtils.stringifyException(e));
-        return;
-      }
-      LOG.info("parsed sitemap {} ({})", url, sitemap.getType());
-
-      AtomicLong injectedURLs = new AtomicLong(0);
-      try {
-        processSitemap(sitemap, output, reporter, injectedURLs, null,
-            startTime, maxUrls, customScore);
-      } catch (IOException e) {
-        LOG.warn("failed to process sitemap {}: {}", url,
-            StringUtils.stringifyException(e));
-      }
-      LOG.info("Injected total {} URLs for {}", injectedURLs, url);
-
-    }
-
-    /**
-     * parse a sitemap (recursively, in case of a sitemap index),
-     * and inject all contained URLs
-     */
-    public void processSitemap(AbstractSiteMap sitemap,
-        OutputCollector<Text, CrawlDatum> output, Reporter reporter,
-        AtomicLong totalUrls, Set<String> processedSitemaps,
-        final long startTime, final long maxUrls, final float customScore)
-        throws IOException {
-
-      if (sitemap.isIndex()) {
-        SiteMapIndex sitemapIndex = (SiteMapIndex) sitemap;
-        if (processedSitemaps == null) {
-          processedSitemaps = new HashSet<String>();
-          processedSitemaps.add(sitemap.getUrl().toString());
-        }
-
-        // choose subsitemaps randomly with a preference for elements in front
-        // and recently published sitemaps
-        PriorityQueue<ScoredSitemap> sitemaps = new PriorityQueue<>();
-        int subSitemaps = 0;
-        for (AbstractSiteMap s : sitemapIndex.getSitemaps()) {
-          subSitemaps++;
-          double publishScore = 0.3;
-          if (s.getLastModified() != null) {
-            double elapsedMonthsSincePublished = (System.currentTimeMillis()
-                - s.getLastModified().getTime()) / (1000.0 * 60 * 60 * 24 * 30);
-            publishScore = (1.0 / Math.log(1.0 + elapsedMonthsSincePublished));
-          }
-          double score = (1.0 / subSitemaps) + publishScore + Math.random();
-          sitemaps.add(new ScoredSitemap(score, s));
-        }
-
-        int failedSubSitemaps = 0;
-        while (sitemaps.size() > 0) {
-
-          long elapsed = (System.currentTimeMillis()-startTime)/1000;
-          if (elapsed > maxSitemapProcessingTime) {
-            LOG.warn(
-                "Max. processing time reached, skipped remaining sitemaps of sitemap index {}",
-                sitemap.getUrl());
-            reporter.getCounter("SitemapInjector",
-                "sitemap index: time limit reached").increment(1);
-            return;
-          }
-          if ((totalUrls.get() == 0)
-              && (elapsed > (maxSitemapProcessingTime / 2))) {
-            LOG.warn(
-                "Half of processing time elapsed and no URLs injected, skipped remaining sitemaps of sitemap index {}",
-                sitemap.getUrl());
-            reporter
-                .getCounter("SitemapInjector",
-                    "sitemap index: no URLs after 50% of time limit")
-                .increment(1);
-            return;
-          }
-          if (failedSubSitemaps > (maxRecursiveSitemaps / 2)) {
-            // do not spend too much time to fetch broken subsitemaps
-            LOG.warn(
-                "Too many failures, skipped remaining sitemaps of sitemap index {}",
-                sitemap.getUrl());
-            reporter
-                .getCounter("SitemapInjector",
-                    "sitemap index: too many failures")
-                .increment(1);
-            return;
-          }
-
-          AbstractSiteMap nextSitemap = sitemaps.poll().sitemap;
-          reporter.getCounter("SitemapInjector", "sitemap indexes processed").increment(1);
-
-          String url = nextSitemap.getUrl().toString();
-          if (processedSitemaps.contains(url)) {
-            LOG.warn("skipped recursive sitemap URL {}", url);
-            reporter.getCounter("SitemapInjector", "skipped recursive sitemap URLs").increment(1);
-            nextSitemap.setProcessed(true);
-            continue;
-          }
-          if (processedSitemaps.size() > maxRecursiveSitemaps) {
-            LOG.warn("{} sitemaps processed for {}, skipped remaining sitemaps",
-                processedSitemaps.size(), sitemap.getUrl());
-            reporter.getCounter("SitemapInjector", "sitemap index limit reached").increment(1);
-            return;
-          }
-          if (totalUrls.longValue() >= maxUrls) {
-            LOG.warn(
-                "URL limit reached, skipped remaining sitemaps of sitemap index {}",
-                sitemap.getUrl());
-            reporter.getCounter("SitemapInjector",
-                "sitemap index: URL limit reached").increment(1);
-            return;
-          }
-
-          processedSitemaps.add(url);
-
-          Content content = getContent(url, reporter);
-          if (content == null) {
-            nextSitemap.setProcessed(true);
-            reporter.getCounter("SitemapInjector", "sitemaps failed to fetch")
-                .increment(1);
-            failedSubSitemaps++;
-            continue;
-          }
-
-          try {
-            AbstractSiteMap parsedSitemap = parseSitemap(content, nextSitemap);
-            processSitemap(parsedSitemap, output, reporter, totalUrls,
-                processedSitemaps, startTime, maxUrls, customScore);
-          } catch (Exception e) {
-            LOG.warn("failed to parse sitemap {}: {}", nextSitemap.getUrl(),
-                StringUtils.stringifyException(e));
-            reporter.getCounter("SitemapInjector", "sitemaps failed to parse")
-                .increment(1);
-            failedSubSitemaps++;
-          }
-          nextSitemap.setProcessed(true);
-        }
-
-      } else {
-        reporter.getCounter("SitemapInjector", "sitemaps processed").increment(1);
-        injectURLs((SiteMap) sitemap, output, reporter, totalUrls, maxUrls, customScore);
-        if (totalUrls.longValue() >= maxUrls) {
-          LOG.warn(
-              "URL limit reached, skipped remaining urls of {}",
-              sitemap.getUrl());
-          reporter.getCounter("SitemapInjector", "sitemap index URL limit reached").increment(1);
+          reporter.getCounter("SitemapInjector", "sitemaps failed to parse").increment(1);
+          LOG.warn("failed to parse sitemap {}: {}", url,
+              StringUtils.stringifyException(e));
           return;
         }
-        sitemap.setProcessed(true);
-      }
-    }
+        LOG.info("parsed sitemap {} ({})", url, sitemap.getType());
 
-    /**
-     * Inject all URLs contained in one {@link SiteMap}.
-     */
-    public void injectURLs(SiteMap sitemap,
-        OutputCollector<Text, CrawlDatum> output, Reporter reporter,
-        AtomicLong totalUrls, long maxUrls, float customScore)
-        throws IOException {
-
-      Collection<SiteMapURL> sitemapURLs = sitemap.getSiteMapUrls();
-      if (sitemapURLs.size() == 0) {
-        LOG.info("No URLs in sitemap {}", sitemap.getUrl());
-        reporter.getCounter("SitemapInjector", "empty sitemap").increment(1);
-        return;
-      }
-      LOG.info("Found {} URLs in {}", sitemapURLs.size(), sitemap.getUrl());
-
-      // random selection of URLs in case the sitemap contains more than accepted
-      // TODO:
-      //  - for sitemap index: should be done over multiple sub-sitemaps
-      //  - need to consider that URLs may be filtered away
-      //  => use "reservoir sampling" (https://en.wikipedia.org/wiki/Reservoir_sampling)
-      Random random = null;
-      float randomSelect = 0.0f;
-      if (sitemapURLs.size() > (maxUrls - totalUrls.get())) {
-        randomSelect = (maxUrls - totalUrls.get())
-            / (.95f * sitemapURLs.size());
-        if (randomSelect < 1.0f) {
-          random = new Random();
-        }
-      }
-
-      for (SiteMapURL siteMapURL : sitemapURLs) {
-
-        if (totalUrls.longValue() >= maxUrls) {
-          reporter.getCounter("SitemapInjector", "sitemap URL limit reached").increment(1);
-          return;
-        }
-
-        if (random != null) {
-          if (randomSelect > random.nextFloat()) {
-            reporter.getCounter("SitemapInjector", "random skip").increment(1);
-            continue;
+        if (checkCrossSubmits) {
+          String host = sitemap.getUrl().getHost();
+          String domain = EffectiveTldFinder.getAssignedDomain(host, false, true);
+          if (domain != null) {
+            crossSubmitDomains.add(domain);
           }
         }
 
-        totalUrls.incrementAndGet();
-
-        // TODO: score and fetch interval should be transparently overridable
-        float sitemapScore = (float) siteMapURL.getPriority();
-        sitemapScore *= customScore;
-        int sitemapInterval = getChangeFrequencySeconds(siteMapURL.getChangeFrequency());
-        long lastModified = -1;
-        if (siteMapURL.getLastModified() != null) {
-          lastModified = siteMapURL.getLastModified().getTime();
+        try {
+          processSitemap(sitemap, null);
+        } catch (IOException e) {
+          LOG.warn("failed to process sitemap {}: {}", url,
+              StringUtils.stringifyException(e));
         }
+        LOG.info("Injected total {} URLs for {}", totalUrls, url);
 
-        String url = siteMapURL.getUrl().toString();
+      }
+
+      /**
+       * parse a sitemap (recursively, in case of a sitemap index),
+       * and inject all contained URLs
+       */
+      public void processSitemap(AbstractSiteMap sitemap,
+          Set<String> processedSitemaps) throws IOException {
+
+        if (sitemap.isIndex()) {
+          SiteMapIndex sitemapIndex = (SiteMapIndex) sitemap;
+          if (processedSitemaps == null) {
+            processedSitemaps = new HashSet<String>();
+            processedSitemaps.add(sitemap.getUrl().toString());
+          }
+
+          // choose subsitemaps randomly with a preference for elements in front
+          // and recently published sitemaps
+          PriorityQueue<ScoredSitemap> sitemaps = new PriorityQueue<>();
+          int subSitemaps = 0;
+          for (AbstractSiteMap s : sitemapIndex.getSitemaps()) {
+            subSitemaps++;
+            double publishScore = 0.3;
+            if (s.getLastModified() != null) {
+              double elapsedMonthsSincePublished = (System.currentTimeMillis()
+                  - s.getLastModified().getTime()) / (1000.0 * 60 * 60 * 24 * 30);
+              publishScore = (1.0 / Math.log(1.0 + elapsedMonthsSincePublished));
+            }
+            double score = (1.0 / subSitemaps) + publishScore + Math.random();
+            sitemaps.add(new ScoredSitemap(score, s));
+          }
+
+          int failedSubSitemaps = 0;
+          while (sitemaps.size() > 0) {
+
+            long elapsed = (System.currentTimeMillis()-startTime)/1000;
+            if (elapsed > maxSitemapProcessingTime) {
+              LOG.warn(
+                  "Max. processing time reached, skipped remaining sitemaps of sitemap index {}",
+                  sitemap.getUrl());
+              reporter.getCounter("SitemapInjector",
+                  "sitemap index: time limit reached").increment(1);
+              return;
+            }
+            if ((totalUrls == 0)
+                && (elapsed > (maxSitemapProcessingTime / 2))) {
+              LOG.warn(
+                  "Half of processing time elapsed and no URLs injected, skipped remaining sitemaps of sitemap index {}",
+                  sitemap.getUrl());
+              reporter
+                  .getCounter("SitemapInjector",
+                      "sitemap index: no URLs after 50% of time limit")
+                  .increment(1);
+              return;
+            }
+            if (failedSubSitemaps > (maxRecursiveSitemaps / 2)) {
+              // do not spend too much time to fetch broken subsitemaps
+              LOG.warn(
+                  "Too many failures, skipped remaining sitemaps of sitemap index {}",
+                  sitemap.getUrl());
+              reporter
+                  .getCounter("SitemapInjector",
+                      "sitemap index: too many failures")
+                  .increment(1);
+              return;
+            }
+
+            AbstractSiteMap nextSitemap = sitemaps.poll().sitemap;
+            reporter.getCounter("SitemapInjector", "sitemap indexes processed").increment(1);
+
+            String url = nextSitemap.getUrl().toString();
+            if (processedSitemaps.contains(url)) {
+              LOG.warn("skipped recursive sitemap URL {}", url);
+              reporter.getCounter("SitemapInjector", "skipped recursive sitemap URLs").increment(1);
+              nextSitemap.setProcessed(true);
+              continue;
+            }
+            if (processedSitemaps.size() > maxRecursiveSitemaps) {
+              LOG.warn("{} sitemaps processed for {}, skipped remaining sitemaps",
+                  processedSitemaps.size(), sitemap.getUrl());
+              reporter.getCounter("SitemapInjector", "sitemap index limit reached").increment(1);
+              return;
+            }
+            if (totalUrls >= maxUrls) {
+              LOG.warn(
+                  "URL limit reached, skipped remaining sitemaps of sitemap index {}",
+                  sitemap.getUrl());
+              reporter.getCounter("SitemapInjector",
+                  "sitemap index: URL limit reached").increment(1);
+              return;
+            }
+
+            processedSitemaps.add(url);
+
+            Content content = getContent(url);
+            if (content == null) {
+              nextSitemap.setProcessed(true);
+              reporter.getCounter("SitemapInjector", "sitemaps failed to fetch")
+                  .increment(1);
+              failedSubSitemaps++;
+              continue;
+            }
+
+            try {
+              AbstractSiteMap parsedSitemap = parseSitemap(content, nextSitemap);
+              processSitemap(parsedSitemap, processedSitemaps);
+            } catch (Exception e) {
+              LOG.warn("failed to parse sitemap {}: {}", nextSitemap.getUrl(),
+                  StringUtils.stringifyException(e));
+              reporter.getCounter("SitemapInjector", "sitemaps failed to parse")
+                  .increment(1);
+              failedSubSitemaps++;
+            }
+            nextSitemap.setProcessed(true);
+          }
+
+        } else {
+          reporter.getCounter("SitemapInjector", "sitemaps processed").increment(1);
+          injectURLs((SiteMap) sitemap);
+          if (totalUrls >= maxUrls) {
+            LOG.warn(
+                "URL limit reached, skipped remaining urls of {}",
+                sitemap.getUrl());
+            reporter.getCounter("SitemapInjector", "sitemap index URL limit reached").increment(1);
+            return;
+          }
+          sitemap.setProcessed(true);
+        }
+      }
+
+      private Content getContent(String url) {
         if (url.length() > maxUrlLength) {
           LOG.warn(
-              "Skipping overlong URL: {} ... (truncated, length = {} characters)",
+              "Not fetching sitemap with overlong URL: {} ... (truncated, length = {} characters)",
               url.substring(0, maxUrlLength), url.length());
-          continue;
+          return null;
         }
-        try {
-          url = filterNormalize(url);
-        } catch (Exception e) {
-          if (LOG.isWarnEnabled()) {
-            LOG.warn("Skipping {}: {}", url, StringUtils.stringifyException(e));
-          }
-          url = null;
-        }
+        String origUrl = url;
+        url = filterNormalize(url);
         if (url == null) {
-          reporter.getCounter("SitemapInjector", "urls from sitemaps rejected by URL filters").increment(1);
-        } else {
-          // URL passed normalizers and filters
-          Text value = new Text(url);
-          CrawlDatum datum = new CrawlDatum(CrawlDatum.STATUS_INJECTED,
-              sitemapInterval, sitemapScore);
-          if (lastModified != -1) {
-            // datum.setModifiedTime(lastModified);
-          }
-          datum.setFetchTime(curTime);
+          LOG.warn("Sitemap rejected by URL filters: {}", origUrl);
+          reporter
+              .getCounter("SitemapInjector", "sitemap rejected by URL filters")
+              .increment(1);
+          return null;
+        }
+        String hostName;
+        try {
+          hostName = new URL(url).getHost();
+        } catch (MalformedURLException e) {
+          return null;
+        }
+        if (failuresPerHost.containsKey(hostName)
+            && failuresPerHost.get(hostName) > maxFailuresPerHost) {
+          LOG.info("Skipped, too many failures per host: {}", url);
+          reporter
+            .getCounter("SitemapInjector", "skipped, too many failures per host")
+            .increment(1);
+          return null;
+        }
+        Protocol protocol = null;
+        try {
+          protocol = protocolFactory.getProtocol(url);
+        } catch (ProtocolNotFound e) {
+          LOG.error("protocol not found " + url);
+          reporter
+            .getCounter("SitemapInjector", "failed to fetch sitemap content, protocol not found")
+            .increment(1);
+          return null;
+        }
 
+        LOG.info("fetching sitemap " + url);
+        ProtocolOutput protocolOutput = null;
+        origUrl = url;
+        int redirects = 0;
+        do {
+          if (redirects > 0) {
+            LOG.info("fetching redirected sitemap " + url);
+          }
+          FetchSitemapCallable fetch = new FetchSitemapCallable(protocol, url,
+              reporter);
+          Future<ProtocolOutput> task = executorService.submit(fetch);
           try {
-            scfilters.injectedScore(value, datum);
-          } catch (ScoringFilterException e) {
-            if (LOG.isWarnEnabled()) {
-              LOG.warn("Cannot filter injected score for url " + url
-                  + ", using default (" + e.getMessage() + ")");
+            protocolOutput = task.get(maxSitemapFetchTime, TimeUnit.SECONDS);
+          } catch (Exception e) {
+            if (e instanceof TimeoutException) {
+              LOG.error("fetch of sitemap {} timed out", url);
+              reporter.getCounter("SitemapInjector",
+                  "failed to fetch sitemap content, timeout").increment(1);
+            } else {
+              LOG.error("fetch of sitemap {} failed with: {}", url,
+                  StringUtils.stringifyException(e));
+              reporter.getCounter("SitemapInjector",
+                  "failed to fetch sitemap content, exception").increment(1);
+            }
+            task.cancel(true);
+            incrementFailuresPerHost(hostName);
+            return null;
+          } finally {
+            fetch = null;
+          }
+
+          if (protocolOutput == null) {
+            return null;
+          }
+
+          if (protocolOutput.getStatus().isRedirect()) {
+            reporter.getCounter("SitemapInjector", "sitemap redirect")
+                .increment(1);
+            String redirUrl = protocolOutput.getStatus().getArgs()[0];
+            url = filterNormalize(redirUrl);
+            if (url == null) {
+              LOG.info(
+                  "Redirect target of sitemap {} rejected by URL filters: {}",
+                  origUrl, redirUrl);
+              reporter
+                  .getCounter("SitemapInjector",
+                      "sitemap (redirect target) rejected by URL filters")
+                  .increment(1);
+              return null;
+            }
+            // TODO: cross-submitting via redirects?
+            //       - dangerous: if a spammer redirects sitemaps
+            //         it would allow arbitrary domains
+//            try {
+//              String host = new URL(url).getHost();
+//              String domain = EffectiveTldFinder.getAssignedDomain(host, true, true);
+//              crossSubmitDomains.add(domain);
+//            } catch (MalformedURLException e) {
+//              // should not happen, as URL already has been checked by filters/normalizers
+//            }
+            redirects++;
+            if (redirects >= maxRedirect) {
+              LOG.warn("sitemap redirect limit exceeded: {}", origUrl);
+              reporter.getCounter("SitemapInjector",
+                  "sitemap redirect limit exceeded").increment(1);
+              // return to avoid that exceeded redirects are counted twice
+              // (also as non-success fetch status)
+              return null;
+            }
+          }
+        } while (protocolOutput.getStatus().isRedirect()
+            && redirects < maxRedirect);
+
+        if (!protocolOutput.getStatus().isSuccess()) {
+          LOG.error("fetch of sitemap {} failed with status code {}", url,
+              protocolOutput.getStatus().getCode());
+          reporter
+            .getCounter("SitemapInjector", "failed to fetch sitemap content, HTTP status != 200")
+            .increment(1);
+          incrementFailuresPerHost(hostName);
+          return null;
+        }
+
+        Content content = protocolOutput.getContent();
+        if (content == null) {
+          LOG.error("No content for {}, status: {}", url,
+              protocolOutput.getStatus().getMessage());
+          reporter
+            .getCounter("SitemapInjector", "failed to fetch sitemap content, empty content")
+            .increment(1);
+          incrementFailuresPerHost(hostName);
+          return null;
+        }
+        return content;
+      }
+
+      private AbstractSiteMap parseSitemap(Content content, Object urlOrSitemap)
+          throws Exception {
+        ParseSitemapCallable parse = new ParseSitemapCallable(content,
+            urlOrSitemap);
+        Future<AbstractSiteMap> task = executorService.submit(parse);
+        AbstractSiteMap sitemap = null;
+        try {
+          // not a recursive task, should be fast
+          sitemap = task.get(maxSitemapProcessingTime/20, TimeUnit.SECONDS);
+        } finally {
+          parse = null;
+        }
+        return sitemap;
+      }
+
+      /**
+       * Inject all URLs contained in one {@link SiteMap}.
+       */
+      public void injectURLs(SiteMap sitemap) throws IOException {
+
+        Collection<SiteMapURL> sitemapURLs = sitemap.getSiteMapUrls();
+        if (sitemapURLs.size() == 0) {
+          LOG.info("No URLs in sitemap {}", sitemap.getUrl());
+          reporter.getCounter("SitemapInjector", "empty sitemap").increment(1);
+          return;
+        }
+        LOG.info("Found {} URLs in {}", sitemapURLs.size(), sitemap.getUrl());
+
+        // random selection of URLs in case the sitemap contains more than accepted
+        // TODO:
+        //  - for sitemap index: should be done over multiple sub-sitemaps
+        //  - need to consider that URLs may be filtered away
+        //  => use "reservoir sampling" (https://en.wikipedia.org/wiki/Reservoir_sampling)
+        Random random = null;
+        float randomSelect = 0.0f;
+        if (sitemapURLs.size() > (maxUrls - totalUrls)) {
+          randomSelect = (maxUrls - totalUrls)
+              / (.95f * sitemapURLs.size());
+          if (randomSelect < 1.0f) {
+            random = new Random();
+          }
+        }
+
+        for (SiteMapURL siteMapURL : sitemapURLs) {
+
+          if (totalUrls >= maxUrls) {
+            reporter.getCounter("SitemapInjector", "sitemap URL limit reached").increment(1);
+            return;
+          }
+
+          if (random != null) {
+            if (randomSelect > random.nextFloat()) {
+              reporter.getCounter("SitemapInjector", "random skip").increment(1);
+              continue;
             }
           }
 
-          reporter.getCounter("SitemapInjector", "urls from sitemaps injected").increment(1);
-          output.collect(value, datum);
+          // TODO: score and fetch interval should be transparently overridable
+          float sitemapScore = (float) siteMapURL.getPriority();
+          sitemapScore *= customScore;
+          int sitemapInterval = getChangeFrequencySeconds(siteMapURL.getChangeFrequency());
+          long lastModified = -1;
+          if (siteMapURL.getLastModified() != null) {
+            lastModified = siteMapURL.getLastModified().getTime();
+          }
+          URL u = siteMapURL.getUrl();
+          String url = u.toString();
+          if (url.length() > maxUrlLength) {
+            LOG.warn(
+                "Skipping overlong URL: {} ... (truncated, length = {} characters)",
+                url.substring(0, maxUrlLength), url.length());
+            continue;
+          }
+          // for simplicity do host and domain checks before normalization
+          String host = u.getHost();
+          if (injectedHosts.size() >= maxHosts
+              && !injectedHosts.contains(host)) {
+            reporter
+                .getCounter("SitemapInjector",
+                    "urls from sitemaps rejected, host limit reached")
+                .increment(1);
+            continue;
+          }
+          if (checkCrossSubmits) {
+            String domain = EffectiveTldFinder.getAssignedDomain(host, true,
+                true);
+            if (domain == null || !crossSubmitDomains.contains(domain)) {
+              reporter
+                  .getCounter("SitemapInjector",
+                      "urls from sitemaps rejected, cross-domain submit")
+                  .increment(1);
+              continue;
+            }
+          }
+          try {
+            url = filterNormalize(url);
+          } catch (Exception e) {
+            if (LOG.isWarnEnabled()) {
+              LOG.warn("Skipping {}: {}", url, StringUtils.stringifyException(e));
+            }
+            url = null;
+          }
+          if (url == null) {
+            reporter.getCounter("SitemapInjector", "urls from sitemaps rejected by URL filters").increment(1);
+          } else {
+            // URL passed normalizers and filters
+            totalUrls++;
+            Text value = new Text(url);
+            CrawlDatum datum = new CrawlDatum(CrawlDatum.STATUS_INJECTED,
+                sitemapInterval, sitemapScore);
+            if (lastModified != -1) {
+              // datum.setModifiedTime(lastModified);
+            }
+            datum.setFetchTime(curTime);
+
+            try {
+              scfilters.injectedScore(value, datum);
+            } catch (ScoringFilterException e) {
+              if (LOG.isWarnEnabled()) {
+                LOG.warn("Cannot filter injected score for url " + url
+                    + ", using default (" + e.getMessage() + ")");
+              }
+            }
+
+            reporter.getCounter("SitemapInjector", "urls from sitemaps injected").increment(1);
+            output.collect(value, datum);
+            injectedHosts.add(host);
+          }
         }
       }
+
     }
 
     /**
