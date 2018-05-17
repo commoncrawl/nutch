@@ -137,7 +137,9 @@ public class SitemapInjector extends Injector {
 
     private static final String SITEMAP_MAX_URLS = "db.injector.sitemap.max_urls";
     private static final String SITEMAP_MAX_HOSTS = "db.injector.sitemap.max_hosts";
-    private static final String SITEMAP_CROSS_SUBMIT_DOMAINS = "db.injector.sitemap.cross-submit-domains";
+    private static final String SITEMAP_CROSS_SUBMIT_CHECK = "db.injector.sitemap.check-cross-submits";
+    private static final String SITEMAP_CROSS_SUBMIT_CHECK_TYPE = "db.injector.sitemap.check-cross-submit.type";
+    private static final String SITEMAP_CROSS_SUBMITS = "db.injector.sitemap.cross-submits";
 
     protected float minInterval;
     protected float maxInterval;
@@ -157,6 +159,13 @@ public class SitemapInjector extends Injector {
 
     protected boolean checkRobotsTxt = true;
     protected boolean checkCrossSubmits = true;
+
+    enum CrossSubmitType {
+      PUBLIC_DOMAIN, PRIVATE_DOMAIN, HOST
+    }
+
+    protected CrossSubmitType checkCrossSubmitsType = CrossSubmitType.PRIVATE_DOMAIN;
+
     protected int maxFailuresPerHost = 5;
     protected int maxRedirect = 3;
 
@@ -186,7 +195,9 @@ public class SitemapInjector extends Injector {
       maxHostsPerSitemapIndex = jobConf.getInt(SITEMAP_MAX_HOSTS, 100);
 
       checkRobotsTxt = jobConf.getBoolean("db.injector.sitemap.checkrobotstxt", true);
-      checkCrossSubmits = jobConf.getBoolean("db.injector.sitemap.check-cross-submits", true);
+      checkCrossSubmits = jobConf.getBoolean(SITEMAP_CROSS_SUBMIT_CHECK, true);
+      checkCrossSubmitsType = CrossSubmitType.valueOf(
+          jobConf.get(SITEMAP_CROSS_SUBMIT_CHECK_TYPE, "PRIVATE_DOMAIN"));
 
       // make sure a sitemap is entirely, even recursively processed within 80%
       // of the task timeout, do not start processing a subsitemap if fetch
@@ -234,7 +245,7 @@ public class SitemapInjector extends Injector {
       float customScore = 0.0f;
       long maxUrls = maxUrlsPerSitemapIndex;
       int maxHosts = maxHostsPerSitemapIndex;
-      Set<String> crossSubmitDomains = new HashSet<>();
+      Set<String> crossSubmits = new HashSet<>();
       Metadata customMetadata = new Metadata();
       if (url.contains("\t") || url.contains(" ")){
         String[] splits;
@@ -276,10 +287,10 @@ public class SitemapInjector extends Injector {
               LOG.error("Invalid host limit for sitemap seed {}: {} - {}",
                   url, metavalue, nfe.getMessage());
             }
-          } else if (metaname.equals(SITEMAP_CROSS_SUBMIT_DOMAINS)
+          } else if (metaname.equals(SITEMAP_CROSS_SUBMITS)
               && checkCrossSubmits) {
             for (String domain : metavalue.split(",")) {
-              crossSubmitDomains.add(domain);
+              crossSubmits.add(domain);
             }
           } else {
             customMetadata.add(metaname,metavalue);
@@ -288,7 +299,7 @@ public class SitemapInjector extends Injector {
       }
 
       SitemapProcessor sp = new SitemapProcessor(output, reporter, customScore,
-          maxUrls, maxHosts, crossSubmitDomains);
+          maxUrls, maxHosts, crossSubmits);
       sp.process(url);
     }
 
@@ -380,16 +391,16 @@ public class SitemapInjector extends Injector {
       long startTime = System.currentTimeMillis();
       long totalUrls = 0;
       Set<String> injectedHosts = new HashSet<>();
-      Set<String> crossSubmitDomains;
+      Set<String> crossSubmits;
 
       public SitemapProcessor(OutputCollector<Text, CrawlDatum> output,
           Reporter reporter, float customScore, long maxUrls, int maxHosts,
-          Set<String> crossSubmitDomains) {
+          Set<String> crossSubmits) {
         this.output = output;
         this.reporter = reporter;
         this.maxUrls = maxUrls;
         this.maxHosts = maxHosts;
-        this.crossSubmitDomains = crossSubmitDomains;
+        this.crossSubmits = crossSubmits;
 
         // distribute site score to outlinks
         // TODO: should be by real number of outlinks not the maximum allowed
@@ -420,9 +431,14 @@ public class SitemapInjector extends Injector {
 
         if (checkCrossSubmits) {
           String host = sitemap.getUrl().getHost();
-          String domain = EffectiveTldFinder.getAssignedDomain(host, false, true);
-          if (domain != null) {
-            crossSubmitDomains.add(domain);
+          String crossSubmit = host;
+          if (checkCrossSubmitsType == CrossSubmitType.PRIVATE_DOMAIN) {
+            crossSubmit = EffectiveTldFinder.getAssignedDomain(host, false, false);
+          } else if (checkCrossSubmitsType == CrossSubmitType.PUBLIC_DOMAIN) {
+            crossSubmit = EffectiveTldFinder.getAssignedDomain(host, false, true);
+          }
+          if (crossSubmit != null) {
+            crossSubmits.add(crossSubmit);
           }
         }
 
@@ -557,7 +573,7 @@ public class SitemapInjector extends Injector {
             LOG.warn(
                 "URL limit reached, skipped remaining urls of {}",
                 sitemap.getUrl());
-            reporter.getCounter("SitemapInjector", "sitemap index URL limit reached").increment(1);
+            reporter.getCounter("SitemapInjector", "sitemap index: URL limit reached").increment(1);
             return;
           }
           sitemap.setProcessed(true);
@@ -785,12 +801,16 @@ public class SitemapInjector extends Injector {
             continue;
           }
           if (checkCrossSubmits) {
-            String domain = EffectiveTldFinder.getAssignedDomain(host, true,
-                true);
-            if (domain == null || !crossSubmitDomains.contains(domain)) {
+            String crossSubmit = host;
+            if (checkCrossSubmitsType == CrossSubmitType.PRIVATE_DOMAIN) {
+              crossSubmit = EffectiveTldFinder.getAssignedDomain(host, false, false);
+            } else if (checkCrossSubmitsType == CrossSubmitType.PUBLIC_DOMAIN) {
+              crossSubmit = EffectiveTldFinder.getAssignedDomain(host, false, true);
+            }
+            if (crossSubmit == null || !crossSubmits.contains(crossSubmit)) {
               reporter
                   .getCounter("SitemapInjector",
-                      "urls from sitemaps rejected, cross-domain submit")
+                      "urls from sitemaps rejected, target not allowed by cross-submits")
                   .increment(1);
               continue;
             }
