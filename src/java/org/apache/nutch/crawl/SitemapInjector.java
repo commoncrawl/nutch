@@ -289,11 +289,11 @@ public class SitemapInjector extends Injector {
             }
           } else if (metaname.equals(SITEMAP_CROSS_SUBMITS)
               && checkCrossSubmits) {
-            for (String domain : metavalue.split(",")) {
-              crossSubmits.add(domain);
+            for (String target : metavalue.split(",")) {
+              crossSubmits.add(target);
             }
           } else {
-            customMetadata.add(metaname,metavalue);
+            customMetadata.add(metaname, metavalue);
           }
         }
       }
