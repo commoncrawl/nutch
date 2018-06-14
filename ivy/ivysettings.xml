@@ -100,5 +100,6 @@
     -->
     <module organisation="org.apache.nutch" name=".*" resolver="internal"/>
     <module organisation="org.commoncrawl" name=".*" resolver="internal-and-maven"/>
+    <module organisation="org.apache.tika" name=".*" resolver="internal-and-maven"/>
   </modules>
 </ivysettings>
