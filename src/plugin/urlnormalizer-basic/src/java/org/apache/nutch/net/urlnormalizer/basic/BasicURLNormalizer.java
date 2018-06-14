@@ -17,6 +17,7 @@
 
 package org.apache.nutch.net.urlnormalizer.basic;
 
+import java.lang.invoke.MethodHandles;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -46,8 +47,8 @@ import org.slf4j.LoggerFactory;
  * </ul>
  */
 public class BasicURLNormalizer extends Configured implements URLNormalizer {
-  public static final Logger LOG = LoggerFactory
-      .getLogger(BasicURLNormalizer.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   /**
    * Pattern to detect whether a URL path could be normalized. Contains one of
@@ -61,7 +62,7 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
    */
   private final static Pattern unescapeRulePattern = Pattern
       .compile("%([0-9A-Fa-f]{2})");
-
+  
   // charset used for encoding URLs before escaping
   private final static Charset utf8 = Charset.forName("UTF-8");
 
@@ -85,68 +86,72 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
       } else {
         unescapedCharacters[c] = false;
       }
-      }
     }
+  }
 
-    public String normalize(String urlString, String scope)
-            throws MalformedURLException {
+  public String normalize(String urlString, String scope)
+      throws MalformedURLException {
     
-        if ("".equals(urlString))                     // permit empty
-            return urlString;
+    if ("".equals(urlString)) // permit empty
+      return urlString;
 
-        urlString = urlString.trim();                 // remove extra spaces
+    urlString = urlString.trim(); // remove extra spaces
 
-        URL url = new URL(urlString);
+    URL url = new URL(urlString);
 
-        String protocol = url.getProtocol();
-        String host = url.getHost();
-        int port = url.getPort();
-        String file = url.getFile();
+    String protocol = url.getProtocol();
+    String host = url.getHost();
+    int port = url.getPort();
+    String file = url.getFile();
 
-        boolean changed = false;
+    boolean changed = false;
 
-        if (!urlString.startsWith(protocol))        // protocol was lowercased
-            changed = true;
+    if (!urlString.startsWith(protocol)) // protocol was lowercased
+      changed = true;
 
     if ("http".equals(protocol) || "https".equals(protocol)
         || "ftp".equals(protocol)) {
 
       if (host != null && url.getAuthority() != null) {
         String newHost = host.toLowerCase(Locale.ROOT); // lowercase host
-                if (!host.equals(newHost)) {
-                    host = newHost;
+        if (!host.equals(newHost)) {
+          host = newHost;
           changed = true;
         } else if (!url.getAuthority().equals(newHost)) {
           // authority (http://<...>/) contains other elements (port, user,
           // etc.) which will likely cause a change if left away
-                    changed = true;
-                }
+          changed = true;
+        }
       } else {
         // no host or authority: recompose the URL from components
         changed = true;
-            }
-
-            if (port == url.getDefaultPort()) {       // uses default port
-                port = -1;                              // so don't specify it
-                changed = true;
-            }
-
-            if (file == null || "".equals(file)) {    // add a slash
-                file = "/";
-                changed = true;
-            }
-
-            if (url.getRef() != null) {                 // remove the ref
-                changed = true;
-            }
-
-      // check for unnecessary use of "/../", "/./", and "//"
-      String file2 = getFileWithNormalizedPath(url);
-            if (!file.equals(file2)) {
-                changed = true;
-                file = file2;
       }
-            }
+
+      if (port == url.getDefaultPort()) { // uses default port
+        port = -1; // so don't specify it
+        changed = true;
+      }
+
+      if (file == null || "".equals(file)) {
+        file = "/";
+        changed = true;
+      } else if (!file.startsWith("/")) {
+        file = "/" + file;
+        changed = true;
+      } else {
+        // check for unnecessary use of "/../", "/./", and "//"
+        String file2 = getFileWithNormalizedPath(url);
+        if (!file.equals(file2)) {
+          changed = true;
+          file = file2;
+        }
+      }
+
+      if (url.getRef() != null) { // remove the ref
+        changed = true;
+      }
+
+    }
 
     // properly encode characters in path/file using percent-encoding
     String file2 = unescapePath(file);
@@ -154,13 +159,13 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
     if (!file.equals(file2)) {
       changed = true;
       file = file2;
-        }
-
-        if (changed)
-            urlString = new URL(protocol, host, port, file).toString();
-
-        return urlString;
     }
+
+    if (changed)
+      urlString = new URL(protocol, host, port, file).toString();
+
+    return urlString;
+  }
 
   private String getFileWithNormalizedPath(URL url)
       throws MalformedURLException {
@@ -190,11 +195,13 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
     // if path is empty return a single slash
     if (file.isEmpty()) {
       file = "/";
+    } else if (!file.startsWith("/")) {
+      file = "/" + file;
     }
 
     return file;
   }
-
+  
   /**
    * Remove % encoding from path segment in URL for characters which should be
    * unescaped according to <a
@@ -202,12 +209,12 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
    */
   private String unescapePath(String path) {
     StringBuilder sb = new StringBuilder();
-            
+    
     Matcher matcher = unescapeRulePattern.matcher(path);
-            
+    
     int end = -1;
     int letter;
-            
+
     // Traverse over all encoded groups
     while (matcher.find()) {
       // Append everything up to this group
@@ -222,11 +229,11 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
       } else {
         // Append the encoded character as uppercase
         sb.append(matcher.group().toUpperCase(Locale.ROOT));
-        }
-
+      }
+      
       end = matcher.start() + 2;
     }
-
+    
     letter = path.length();
     
     // Append the rest if there's anything
@@ -238,21 +245,21 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
     return sb.toString();
   }
 
-    /**
+  /**
    * Convert path segment of URL from Unicode to UTF-8 and escape all
    * characters which should be escaped according to <a
    * href="https://tools.ietf.org/html/rfc3986#section-2.2">RFC3986</a>..
-     */
+   */
   private String escapePath(String path) {
     StringBuilder sb = new StringBuilder(path.length());
 
     // Traverse over all bytes in this URL
     for (byte b: path.getBytes(utf8)) {
       // Is this a control character?
-      if (b < 33 || b == 91 || b == 93) {
+      if (b < 0x21 || b == 0x5B || b == 0x5D || b == 0x7B || b == 0x7D) {
         // Start escape sequence 
         sb.append('%');
-
+        
         // Get this byte's hexadecimal representation 
         String hex = Integer.toHexString(b & 0xFF).toUpperCase(Locale.ROOT);
         
@@ -268,8 +275,8 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
         // No, just append this character as-is
         sb.append((char)b);
       }
-  }
-
+    }
+    
     return sb.toString();
   }
 
@@ -293,6 +300,6 @@ public class BasicURLNormalizer extends Configured implements URLNormalizer {
       }
     }
     System.exit(0);
-}
+  }
 
 }
