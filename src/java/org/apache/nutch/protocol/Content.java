@@ -42,7 +42,7 @@ import org.apache.nutch.metadata.Metadata;
 import org.apache.nutch.util.MimeUtil;
 import org.apache.nutch.util.NutchConfiguration;
 
-public final class Content implements Writable{
+public final class Content implements Writable {
 
   public static final String DIR_NAME = "content";
 
@@ -84,6 +84,29 @@ public final class Content implements Writable{
     this.metadata = metadata;
 
     this.mimeTypes = new MimeUtil(conf);
+
+    this.contentType = getContentType(contentType, url, content);
+  }
+
+  public Content(String url, String base, byte[] content, String contentType,
+      Metadata metadata, MimeUtil mimeTypes) {
+
+    if (url == null)
+      throw new IllegalArgumentException("null url");
+    if (base == null)
+      throw new IllegalArgumentException("null base");
+    if (content == null)
+      throw new IllegalArgumentException("null content");
+    if (metadata == null)
+      throw new IllegalArgumentException("null metadata");
+
+    this.url = url;
+    this.base = base;
+    this.content = content;
+    this.metadata = metadata;
+
+    this.mimeTypes = mimeTypes;
+
     this.contentType = getContentType(contentType, url, content);
   }
 

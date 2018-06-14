@@ -164,7 +164,7 @@ public class HttpResponse implements Response {
         reqStr.append(path);
       }
 
-      reqStr.append(" HTTP/1.0\r\n");
+      reqStr.append(" HTTP/1.1\r\n");
 
       reqStr.append("Host: ");
       reqStr.append(host);
@@ -219,6 +219,10 @@ public class HttpResponse implements Response {
             .toString(datum.getModifiedTime()));
         reqStr.append("\r\n");
       }
+
+      // "signal that this connection will be closed after completion of the
+      // response", see https://tools.ietf.org/html/rfc7230#section-6.1
+      reqStr.append("Connection: close\r\n");
       reqStr.append("\r\n");
 
       headers.set(Nutch.FETCH_DEST_IP_KEY, sockAddr.getAddress().getHostAddress());
