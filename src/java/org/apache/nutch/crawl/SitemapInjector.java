@@ -760,11 +760,14 @@ public class SitemapInjector extends Injector {
           }
         }
 
+        int crossSubmitsRejected = 0;
+        int hostLimitRejected = 0;
         for (SiteMapURL siteMapURL : sitemapURLs) {
 
           if (totalUrls >= maxUrls) {
             reporter.getCounter("SitemapInjector", "sitemap URL limit reached").increment(1);
-            return;
+            LOG.info("URL limit ({}) reached for {}", maxUrls, sitemap.getUrl());
+            break;
           }
 
           if (random != null) {
@@ -794,6 +797,7 @@ public class SitemapInjector extends Injector {
           String host = u.getHost();
           if (injectedHosts.size() >= maxHosts
               && !injectedHosts.contains(host)) {
+            hostLimitRejected++;
             reporter
                 .getCounter("SitemapInjector",
                     "urls from sitemaps rejected, host limit reached")
@@ -808,6 +812,7 @@ public class SitemapInjector extends Injector {
               crossSubmit = EffectiveTldFinder.getAssignedDomain(host, false, true);
             }
             if (crossSubmit == null || !crossSubmits.contains(crossSubmit)) {
+              crossSubmitsRejected++;
               reporter
                   .getCounter("SitemapInjector",
                       "urls from sitemaps rejected, target not allowed by cross-submits")
@@ -849,6 +854,17 @@ public class SitemapInjector extends Injector {
             output.collect(value, datum);
             injectedHosts.add(host);
           }
+        }
+        if (crossSubmitsRejected > 0) {
+          LOG.info("Rejected {} cross-submits for {} ({})",
+              crossSubmitsRejected, sitemap.getUrl(),
+              sitemap.getType().toString());
+        }
+        if (hostLimitRejected > 0) {
+          LOG.info(
+              "Rejected {} URLs because max. number of linked hosts is reached for {} ({})",
+              hostLimitRejected, sitemap.getUrl(),
+              sitemap.getType().toString());
         }
       }
 
