@@ -54,7 +54,7 @@
     <ant dir="indexer-dummy" target="deploy"/>
 <!--<ant dir="indexer-elastic" target="deploy"/>-->
 <!--<ant dir="indexer-elastic-rest" target="deploy"/>-->
-    <ant dir="indexer-rabbit" target="deploy"/>
+<!--<ant dir="indexer-rabbit" target="deploy"/>-->
 <!--<ant dir="indexer-solr" target="deploy"/>-->
     <ant dir="language-identifier" target="deploy"/>
     <ant dir="microformats-reltag" target="deploy"/>
@@ -77,7 +77,7 @@
 <!--<ant dir="protocol-interactiveselenium" target="deploy" />-->
     <ant dir="protocol-okhttp" target="deploy"/>
 <!--<ant dir="protocol-selenium" target="deploy" />-->
-    <ant dir="publish-rabbitmq" target="deploy"/>
+<!--<ant dir="publish-rabbitmq" target="deploy"/>-->
     <ant dir="scoring-adaptive" target="deploy"/>
     <ant dir="scoring-depth" target="deploy"/>
     <ant dir="scoring-link" target="deploy"/>
@@ -191,7 +191,7 @@
     <ant dir="indexer-dummy" target="clean"/>
 <!--<ant dir="indexer-elastic" target="clean"/>-->
 <!--<ant dir="indexer-elastic-rest" target="clean"/>-->
-    <ant dir="indexer-rabbit" target="clean"/>
+<!--<ant dir="indexer-rabbit" target="clean"/>-->
 <!--<ant dir="indexer-solr" target="clean"/>-->
     <ant dir="language-identifier" target="clean"/>
 <!--<ant dir="lib-htmlunit" target="clean"/>-->
@@ -221,7 +221,7 @@
 <!--<ant dir="protocol-interactiveselenium" target="clean" />-->
     <ant dir="protocol-okhttp" target="clean"/>
 <!--<ant dir="protocol-selenium" target="clean" />-->
-    <ant dir="publish-rabbitmq" target="clean"/>
+<!--<ant dir="publish-rabbitmq" target="clean"/>-->
     <ant dir="scoring-depth" target="clean"/>
     <ant dir="scoring-link" target="clean"/>
     <ant dir="scoring-opic" target="clean"/>
