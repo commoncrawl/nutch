@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.nutch.crawl.CrawlDatum;
+import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.net.protocols.Response;
 import org.apache.nutch.protocol.Content;
 import org.apache.nutch.protocol.Protocol;
@@ -204,6 +205,8 @@ public class HttpRobotRulesParser extends RobotRulesParser {
         robotsUrl.toString(), robotsBytes,
         robotsResponse.getHeader("Content-Type"), robotsResponse.getHeaders(),
         getConf());
+    content.getMetadata().add(Nutch.FETCH_TIME_KEY,
+        Long.toString(System.currentTimeMillis()));
     robotsTxtContent.add(content);
   }
 
