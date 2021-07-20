@@ -759,7 +759,14 @@ public abstract class HttpBase implements Protocol {
       boolean followRedirects) throws ProtocolException, IOException;
 
   @Override
+  @Deprecated
   public BaseRobotRules getRobotRules(Text url, CrawlDatum datum,
+      List<Content> robotsTxtContent) {
+    return robots.getRobotRulesSet(this, url, robotsTxtContent);
+  }
+
+  @Override
+  public BaseRobotRules getRobotRules(URL url, CrawlDatum datum,
       List<Content> robotsTxtContent) {
     return robots.getRobotRulesSet(this, url, robotsTxtContent);
   }

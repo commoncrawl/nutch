@@ -299,7 +299,17 @@ public class Ftp implements Protocol {
    * Get the robots rules for a given url
    */
   @Override
+  @Deprecated
   public BaseRobotRules getRobotRules(Text url, CrawlDatum datum,
+      List<Content> robotsTxtContent) {
+    return robots.getRobotRulesSet(this, url, robotsTxtContent);
+  }
+
+  /**
+   * Get the robots rules for a given url
+   */
+  @Override
+  public BaseRobotRules getRobotRules(URL url, CrawlDatum datum,
       List<Content> robotsTxtContent) {
     return robots.getRobotRulesSet(this, url, robotsTxtContent);
   }

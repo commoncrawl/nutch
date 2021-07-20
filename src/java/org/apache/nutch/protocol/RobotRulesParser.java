@@ -413,8 +413,7 @@ public abstract class RobotRulesParser implements Tool {
         List<Content> robotsTxtContent) {
       BaseRobotRules rules;
       if (protocol != null) {
-        rules = protocol.getRobotRules(new Text(url.toString()), null,
-            robotsTxtContent);
+        rules = protocol.getRobotRules(url, null, robotsTxtContent);
       } else {
         try {
           int contentLength = url.openConnection().getContentLength();
