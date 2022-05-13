@@ -140,7 +140,7 @@ public class UpdateHostDbMapper
       // Filtered out?
       if (buffer == null) {
         context.getCounter("UpdateHostDb", "filtered_records").increment(1);
-        LOG.info("UpdateHostDb: {} crawldatum has been filtered", hostName);
+        LOG.debug("UpdateHostDb: {} crawldatum has been filtered", hostName);
         return;
       }
 
@@ -187,17 +187,19 @@ public class UpdateHostDbMapper
 
             // Am i a redirect?
             if (reprUrl != null) {
-              LOG.info("UpdateHostDb: homepage: " + keyStr + " redirects to: " + args[0]);
+              LOG.debug("UpdateHostDb: homepage: {} redirects to: {}", keyStr,
+                  args[0]);
               context.write(host, new NutchWritable(hostDatum));
               hostDatum.setHomepageUrl(reprUrl);
             } else {
-              LOG.info("UpdateHostDb: homepage: " + keyStr + 
-                " redirects to: " + args[0] + " but has been filtered out");
+              LOG.debug(
+                  "UpdateHostDb: homepage: {} redirects to: {} but has been filtered out",
+                  keyStr, args[0]);
             }
           } else {
             hostDatum.setHomepageUrl(homepage);
             context.write(host, new NutchWritable(hostDatum));
-            LOG.info("UpdateHostDb: homepage: " + homepage);
+            LOG.debug("UpdateHostDb: homepage: {}", homepage);
           }
         }
       }
@@ -212,7 +214,7 @@ public class UpdateHostDbMapper
       // Filtered out?
       if (buffer == null) {
         context.getCounter("UpdateHostDb", "filtered_records").increment(1);
-        LOG.info("UpdateHostDb: {} hostdatum has been filtered", keyStr);
+        LOG.debug("UpdateHostDb: {} hostdatum has been filtered", keyStr);
         return;
       }
 
@@ -236,7 +238,7 @@ public class UpdateHostDbMapper
       // Filtered out?
       if (buffer == null) {
         context.getCounter("UpdateHostDb", "filtered_records").increment(1);
-        LOG.info("UpdateHostDb: {} score has been filtered", keyStr);
+        LOG.debug("UpdateHostDb: {} score has been filtered", keyStr);
         return;
       }
 
