@@ -18,6 +18,7 @@ package org.apache.nutch.hostdb;
 
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
+import java.net.MalformedURLException;
 import java.net.URL;
 
 import org.apache.hadoop.io.FloatWritable;
@@ -131,7 +132,13 @@ public class UpdateHostDbMapper
     // Check if we process records from the CrawlDB
     if (value instanceof CrawlDatum) {
 
-      URL url = new URL(keyStr);
+      URL url;
+      try {
+        url = new URL(keyStr);
+      } catch (MalformedURLException e) {
+        context.getCounter("UpdateHostDb", "malformed_url").increment(1);
+        return;
+      }
       String hostName = URLUtil.getHost(url);
 
       // Get the normalized and filtered host of this URL
