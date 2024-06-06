@@ -12,17 +12,17 @@ Notable additions in Common Crawl's fork of Nutch (not yet pushed to upstream Nu
 How to install additional requirements to build this fork of Nutch:
 - [crawler-commons](/crawler-commons/crawler-commons) development snapshot package:
   ```
-  git clone git@github.com:crawler-commons/crawler-commons.git
+  git clone https://github.com/crawler-commons/crawler-commons.git
   cd crawler-commons/
   mvn install
   ```
-- install the latest public suffix list into `conf/` to ensure that it is definitely used (see #17):
+- install the latest public suffix list into `conf/` to ensure that it is definitely used (see [#17](https://github.com/commoncrawl/nutch/issues/17)):
   ```
   wget https://publicsuffix.org/list/public_suffix_list.dat -O conf/effective_tld_names.dat
   ```
 - [Java wrapper for CLD2 language detection](/commoncrawl/language-detection-cld2)
   ```
-  git clone git@github.com:commoncrawl/language-detection-cld2.git
+  git clone https://github.com/commoncrawl/language-detection-cld2.git
   cd language-detection-cld2/
   mvn install
   ```
