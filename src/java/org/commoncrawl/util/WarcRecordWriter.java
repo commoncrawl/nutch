@@ -59,6 +59,8 @@ import org.apache.nutch.protocol.ProtocolStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.net.InetAddresses;
+
 class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
 
   private static final Logger LOG = LoggerFactory
@@ -224,13 +226,13 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
 
   /**
    * Compose a unique WARC file name.
-   * 
+   *
    * The WARC specification recommends:
    * <code>Prefix-Timestamp-Serial-Crawlhost.warc.gz</code> (<a href=
    * "http://iipc.github.io/warc-specifications/specifications/warc-format/
    * warc-1.1/#annex-c-informative-warc-file-size-and-name-recommendations">WARC
    * 1.1, Annex C</a>)
-   * 
+   *
    * @param prefix
    *          WARC file name prefix
    * @param startDate
@@ -302,9 +304,9 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
   /**
    * Fix the HTTP version in the status line - replace <code>HTTP/2</code>
    * by <code>HTTP/1.1</code> ({@link this#HTTP_VERSION_FALLBACK}}.
-   * 
+   *
    * See also {@link #fixHttpHeaders(String, int)}
-   * 
+   *
    * @param headers
    *          HTTP 1.1 or 1.0 request header string, CR-LF-separated lines,
    *          first line is the status line
@@ -335,10 +337,10 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
    * <code>Content-Length</code>, <code>Content-Encoding</code> and
    * <code>Transfer-Encoding</code> which may confuse WARC readers. Ensure that
    * returned header end with a single empty line (<code>\r\n\r\n</code>).
-   * 
+   *
    * If the HTTP version in the status line is <code>HTTP/2</code>, replace it
    * by <code>HTTP/1.1</code> ({@link this#HTTP_VERSION_FALLBACK}}.
-   * 
+   *
    * @param headers
    *          HTTP 1.1 or 1.0 response header string, CR-LF-separated lines,
    *          first line is the status line
@@ -478,6 +480,20 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
       LOG.warn("Failed to get hostname: {}", e.getMessage());
     }
     return "localhost";
+  }
+
+  /**
+   * Canonicalize IPv6 address strings.
+   *
+   * @param ip
+   *          IP address string representation
+   * @return the canonical IP address
+   */
+  protected static String canonicalizeIP(String ip) {
+    if (ip.indexOf(':') > -1) {
+      return InetAddresses.toAddrString(InetAddresses.forString(ip));
+    }
+    return ip;
   }
 
   private WarcWriter openWarcWriter(Path warcPath, DataOutputStream warcOut,
@@ -720,7 +736,7 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
       String val = value.content.getMetadata().get(name);
       switch (name) {
       case Response.IP_ADDRESS:
-        ip = val;
+        ip = canonicalizeIP(val);
         break;
       case Response.REQUEST:
         verbatimRequestHeaders = val;
@@ -861,11 +877,11 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
     if (notModified) {
       /*
        * revisit record of profile WarcWriter.PROFILE_REVISIT_NOT_MODIFIED
-       * 
+       *
        * Note: "revisits" identified by signature comparison
        * (WarcWriter.PROFILE_REVISIT_IDENTICAL_DIGEST) are stored as response
        * records.
-       * 
+       *
        * The modified date of the CrawlDatum is the date of the last successful
        * fetch with content (status 200). It is used for the
        * WARC-Refers-To-Date.
