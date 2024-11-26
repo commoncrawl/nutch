@@ -113,7 +113,7 @@
 		<dependency org="com.fasterxml.jackson.jaxrs" name="jackson-jaxrs-json-provider" rev="2.15.2" conf="*->default" />
 
 		<!-- WARC artifacts needed -->
-		<dependency org="org.netpreserve.commons" name="webarchive-commons" rev="1.1.9" conf="*->default">
+		<dependency org="org.netpreserve.commons" name="webarchive-commons" rev="1.1.11" conf="*->default">
 			<exclude module="hadoop-core" />
 			<exclude org="com.google.guava" />
 			<exclude org="junit" />
