@@ -34,7 +34,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.function.BiPredicate;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
