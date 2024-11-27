@@ -703,6 +703,14 @@ public class FetcherThread extends Thread {
         context.getCounter("TlsProtocolVersion", versions[i]).increment(1);
       }
     }
+    String ipaddress = contentMetadata.get(Response.IP_ADDRESS);
+    if (ipaddress == null) {
+      // IP address is not recorded
+    } else if (ipaddress.indexOf(':') != -1) {
+      context.getCounter("IPaddressVersion", "IPv6").increment(1);
+    } else {
+      context.getCounter("IPaddressVersion", "IPv4").increment(1);
+    }
   }
 
   private ParseStatus output(Text key, CrawlDatum datum, Content content,
