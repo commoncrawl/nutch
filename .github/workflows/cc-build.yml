@@ -46,8 +46,9 @@ jobs:
           mvn install
       - name: Install crawler-commons development version
         run: |
-          git clone https://github.com/crawler-commons/crawler-commons.git
+          git clone https://github.com/commoncrawl/crawler-commons.git
           cd crawler-commons/
+          git checkout commons-io-downgrade
           mvn install
       - name: Install recent public suffix list
         run: |
