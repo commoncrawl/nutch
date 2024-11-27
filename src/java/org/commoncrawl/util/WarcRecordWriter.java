@@ -874,6 +874,7 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
       }
     }
 
+    URI responseId = null;
     if (notModified) {
       /*
        * revisit record of profile WarcWriter.PROFILE_REVISIT_NOT_MODIFIED
@@ -896,7 +897,7 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
        * a well-defined payload."
        */
       String payloadDigest = null;
-      writer.writeWarcRevisitRecord(targetUri, ip, httpStatusCode, date, infoId,
+      responseId = writer.writeWarcRevisitRecord(targetUri, ip, httpStatusCode, date, infoId,
           requestId, WarcWriter.PROFILE_REVISIT_NOT_MODIFIED, lastModifiedDate,
           payloadDigest, blockDigest, protocolVersions, cipherSuites,
           responseHeaderBytes, value.content);
@@ -915,35 +916,35 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
 
       String payloadDigest = getSha1DigestWithAlg(value.content.getContent());
       String blockDigest = getSha1DigestWithAlg(responseBytes);
-      URI responseId = writer.writeWarcResponseRecord(targetUri, ip,
+      responseId = writer.writeWarcResponseRecord(targetUri, ip,
           httpStatusCode, date, infoId, requestId, payloadDigest, blockDigest,
           truncatedReason, protocolVersions, cipherSuites, responseBytes, value.content);
+    }
 
-      // Write metadata record
-      StringBuilder metadatasb = new StringBuilder(4096);
-      Map<String, String> metadata = new LinkedHashMap<String, String>();
+    // Write metadata record
+    StringBuilder metadatasb = new StringBuilder(4096);
+    Map<String, String> metadata = new LinkedHashMap<String, String>();
 
-      if (fetchDuration != null) {
-        metadata.put("fetchTimeMs", fetchDuration);
+    if (fetchDuration != null) {
+      metadata.put("fetchTimeMs", fetchDuration);
+    }
+    if (ldres != null) {
+      if (ldres.charset != null) {
+        metadata.put("charset-detected", ldres.charset.name());
       }
-      if (ldres != null) {
-        if (ldres.charset != null) {
-          metadata.put("charset-detected", ldres.charset.name());
-        }
-        if (ldres.languages != null) {
-          metadata.put("languages-cld2", ldres.languages.toJSON());
-        }
+      if (ldres.languages != null) {
+        metadata.put("languages-cld2", ldres.languages.toJSON());
       }
-      if (metadata.size() > 0) {
-        for (Map.Entry<String, String> entry : metadata.entrySet()) {
-          metadatasb.append(entry.getKey()).append(COLONSP)
-              .append(entry.getValue()).append(CRLF);
-        }
-        metadatasb.append(CRLF);
+    }
+    if (metadata.size() > 0) {
+      for (Map.Entry<String, String> entry : metadata.entrySet()) {
+        metadatasb.append(entry.getKey()).append(COLONSP)
+            .append(entry.getValue()).append(CRLF);
+      }
+      metadatasb.append(CRLF);
 
-        writer.writeWarcMetadataRecord(targetUri, date, infoId, responseId,
-            null, metadatasb.toString().getBytes(StandardCharsets.UTF_8));
-      }
+      writer.writeWarcMetadataRecord(targetUri, date, infoId, responseId, null,
+          metadatasb.toString().getBytes(StandardCharsets.UTF_8));
     }
   }
 
