@@ -77,8 +77,13 @@ public class TestURLUtil {
     Assert.assertEquals("example.2000.hu", URLUtil.getDomainName(url));
 
     // test non-ascii
-    url = new URL("http://www.example.商業.tw");
-    Assert.assertEquals("example.商業.tw", URLUtil.getDomainName(url));
+    url = new URL("http://www.example.flå.no");
+    Assert.assertEquals("example.flå.no", URLUtil.getDomainName(url));
+    url = new URL("http://www.example.栃木.jp");
+    Assert.assertEquals("example.栃木.jp", URLUtil.getDomainName(url));
+    // broken by https://github.com/publicsuffix/list/commit/408a7b0bdec993884865baaa2f0d14cc9a060885
+    // url = new URL("http://www.example.商業.tw");
+    // Assert.assertEquals("example.商業.tw", URLUtil.getDomainName(url));
 
     // test URL without host/authority
     url = new URL("file:/path/index.html");
@@ -141,8 +146,13 @@ public class TestURLUtil {
     Assert.assertEquals("2000.hu", URLUtil.getDomainSuffix(url));
 
     // test non-ascii
-    url = new URL("http://www.example.商業.tw");
-    Assert.assertEquals("xn--czrw28b.tw", URLUtil.getDomainSuffix(url));
+    url = new URL("http://www.example.flå.no");
+    Assert.assertEquals("xn--fl-zia.no", URLUtil.getDomainSuffix(url));
+    url = new URL("http://www.example.栃木.jp");
+    Assert.assertEquals("xn--4pvxs.jp", URLUtil.getDomainSuffix(url));
+    // broken by https://github.com/publicsuffix/list/commit/408a7b0bdec993884865baaa2f0d14cc9a060885
+    // url = new URL("http://www.example.商業.tw");
+    // Assert.assertEquals("xn--czrw28b.tw", URLUtil.getDomainSuffix(url));
   }
 
   @Test
