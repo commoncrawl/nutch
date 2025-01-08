@@ -113,18 +113,24 @@
 		<dependency org="com.fasterxml.jackson.jaxrs" name="jackson-jaxrs-json-provider" rev="2.15.2" conf="*->default" />
 
 		<!-- WARC artifacts needed -->
-		<dependency org="org.netpreserve.commons" name="webarchive-commons" rev="1.1.11" conf="*->default">
-			<exclude module="hadoop-core" />
+		<dependency org="org.netpreserve.commons" name="webarchive-commons" rev="1.3.0" conf="*->default">
+			<exclude module="hadoop-common" />
+			<exclude module="hadoop-mapreduce-client-core" />
 			<exclude org="com.google.guava" />
 			<exclude org="junit" />
 			<!-- Exclude dependencies with incompatible license (see https://www.apache.org/legal/resolved.html#category-x) -->
-			<exclude org="org.json" /><!-- JSON License -->
+			<!--
+					JSON License, see
+					https://lists.apache.org/thread/2zxx56kk3j4ql5otqkrpsjmqxxp8jzoh
+					https://issues.apache.org/jira/browse/LEGAL-245
+					https://issues.apache.org/jira/browse/LEGAL-666
+			-->
+			<exclude org="org.json" />
 			<!--
 				Exclusion of the following dependencies disables support of WARC generation by
 				"bin/nutch commoncrawldump -warc ..."
 				Please remove these exclusion and recompile Nutch to generate WARC files using the tool "commoncrawldump".
 			-->
-			<exclude org="it.unimi.dsi" module="dsiutils" /><!-- LGPL 2.1 -->
 			<exclude org="org.gnu.inet" module="libidn" /><!-- LGPL 2.1 -->
 		</dependency>
 
