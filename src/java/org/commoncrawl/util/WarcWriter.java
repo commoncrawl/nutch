@@ -109,8 +109,8 @@ public class WarcWriter {
 
   public WarcWriter(final OutputStream out) {
     this.origOut = this.out = out;
-    isoDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
-    isoDate.setTimeZone(TimeZone.getTimeZone("GMT"));
+    isoDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT);
+    isoDate.setTimeZone(TimeZone.getTimeZone("UTC"));
   }
 
   /**
