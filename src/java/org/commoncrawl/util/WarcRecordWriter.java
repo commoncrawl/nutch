@@ -115,6 +115,7 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
   int maxContent = Integer.MAX_VALUE;
   private String precedingURL = ""; // for deduplication
   private URLNormalizers urlNormalizers;
+  private URLNormalizers urlNormalizersRedirect;
 
   public WarcRecordWriter(Configuration conf, Path outputPath, int partition,
       TaskAttemptContext context) throws IOException {
@@ -124,8 +125,8 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
     FileSystem fs = outputPath.getFileSystem(conf);
 
     SimpleDateFormat fileDate = new SimpleDateFormat("yyyyMMddHHmmss",
-        Locale.US);
-    fileDate.setTimeZone(TimeZone.getTimeZone("GMT"));
+        Locale.ROOT);
+    fileDate.setTimeZone(TimeZone.getTimeZone("UTC"));
 
     String prefix = conf.get("warc.export.prefix", "NUTCH-CRAWL");
 
@@ -167,6 +168,12 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
       skipByContent = true;
     }
     urlNormalizers = new URLNormalizers(conf, URLNormalizers.SCOPE_INDEXER);
+    if (generateCdx) {
+      // URL normalizers to normalize the redirect targets/locations put into
+      // the CDX index
+      urlNormalizersRedirect = new URLNormalizers(conf,
+          URLNormalizers.SCOPE_FETCHER);
+    }
 
     Path warcPath = new Path(new Path(outputPath, "warc"), filename);
     warcOut = fs.create(warcPath);
@@ -176,7 +183,8 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
           conf.get("warc.export.cdx.path", outputPath.toString()));
       cdxOut = openCdxOutputStream(new Path(cdxPath, "warc"), filename, conf);
     }
-    warcWriter = openWarcWriter(warcPath, warcOut, cdxOut);
+    warcWriter = openWarcWriter(warcPath, warcOut, cdxOut,
+        urlNormalizersRedirect);
     warcinfoId = warcWriter.writeWarcinfoRecord(filename, hostname, publisher,
         operator, software, isPartOf, description, captureStartDate);
 
@@ -188,7 +196,9 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
         crawlDiagnosticsCdxOut = openCdxOutputStream(
             new Path(cdxPath, "crawldiagnostics"), filename, conf);
       }
-      crawlDiagnosticsWarcWriter = openWarcWriter(crawlDiagnosticsWarcPath, crawlDiagnosticsWarcOut,crawlDiagnosticsCdxOut);
+      crawlDiagnosticsWarcWriter = openWarcWriter(crawlDiagnosticsWarcPath,
+          crawlDiagnosticsWarcOut, crawlDiagnosticsCdxOut,
+          urlNormalizersRedirect);
       crawlDiagnosticsWarcinfoId = crawlDiagnosticsWarcWriter
           .writeWarcinfoRecord(filename, hostname, publisher, operator,
               software, isPartOf, description, captureStartDate);
@@ -203,7 +213,7 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
             filename, conf);
       }
       robotsTxtWarcWriter = openWarcWriter(robotsTxtWarcPath, robotsTxtWarcOut,
-          robotsTxtCdxOut);
+          robotsTxtCdxOut, urlNormalizersRedirect);
       robotsTxtWarcinfoId = robotsTxtWarcWriter.writeWarcinfoRecord(filename,
           hostname, publisher, operator, software, isPartOf, description,
           captureStartDate);
@@ -497,9 +507,9 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
   }
 
   private WarcWriter openWarcWriter(Path warcPath, DataOutputStream warcOut,
-      DataOutputStream cdxOut) {
+      DataOutputStream cdxOut, URLNormalizers redirectNormalizers) {
     if (cdxOut != null) {
-      return new WarcCdxWriter(warcOut, cdxOut, warcPath);
+      return new WarcCdxWriter(warcOut, cdxOut, warcPath, redirectNormalizers);
     }
     return new WarcWriter(warcOut);
   }

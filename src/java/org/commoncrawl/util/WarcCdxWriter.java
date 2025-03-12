@@ -18,13 +18,16 @@ package org.commoncrawl.util;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 
@@ -32,6 +35,7 @@ import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.nutch.metadata.Metadata;
+import org.apache.nutch.net.URLNormalizers;
 import org.apache.nutch.net.protocols.Response;
 import org.apache.nutch.protocol.Content;
 import org.archive.url.WaybackURLKeyMaker;
@@ -57,6 +61,7 @@ public class WarcCdxWriter extends WarcWriter {
   private SimpleDateFormat timestampFormat;
   private ObjectWriter jsonWriter;
   private WaybackURLKeyMaker surtKeyMaker = new WaybackURLKeyMaker(true);
+  private URLNormalizers urlNormalizersRedirect;
 
   /**
    * JSON indentation same as by Python WayBack
@@ -81,17 +86,18 @@ public class WarcCdxWriter extends WarcWriter {
   }
 
   public WarcCdxWriter(OutputStream warcOut, OutputStream cdxOut,
-      Path warcFilePath) {
+      Path warcFilePath, URLNormalizers redirectNormalizers) {
     super(new CountingOutputStream(warcOut));
     countingOut = (CountingOutputStream) this.out;
     this.cdxOut = cdxOut;
-    timestampFormat = new SimpleDateFormat("yyyyMMddHHmmss");
+    timestampFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.ROOT);
     timestampFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     warcFilename = warcFilePath.toUri().getPath().replaceFirst("^/", "");
     ObjectMapper jsonMapper = new ObjectMapper();
     jsonMapper.getFactory().configure(JsonGenerator.Feature.ESCAPE_NON_ASCII,
         true);
     jsonWriter = jsonMapper.writer(new JsonIndenter());
+    urlNormalizersRedirect = redirectNormalizers;
   }
 
   @Override
@@ -125,6 +131,19 @@ public class WarcCdxWriter extends WarcWriter {
     String redirectLocation = null;
     if (isRedirect(httpStatusCode)) {
       redirectLocation = getMeta(content.getMetadata(), "Location");
+      if (redirectLocation != null) {
+        try {
+          // convert redirects from relative to absolute URLs
+          redirectLocation = new URL(targetUri.toURL(), redirectLocation).toString();
+          if (urlNormalizersRedirect != null) {
+            // normalize the redirect target URL
+            redirectLocation = urlNormalizersRedirect.normalize(redirectLocation,
+                URLNormalizers.SCOPE_FETCHER);
+          }
+        } catch (MalformedURLException e) {
+          redirectLocation = null;
+        }
+      }
     }
     writeCdxLine(targetUri, date, offset, length, payloadDigest, content, false,
         redirectLocation, truncated);
