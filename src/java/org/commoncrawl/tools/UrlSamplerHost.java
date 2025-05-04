@@ -21,12 +21,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
-import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Random;
 import java.util.regex.Pattern;
 
@@ -47,14 +44,13 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.crawl.Generator2;
 import org.apache.nutch.crawl.Generator2.DomainScorePair;
-import org.apache.nutch.crawl.URLPartitioner;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.TimingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Sample URLs used as Nutch seeds following per-domain limits.
+ * Sample URLs used as Nutch seeds following per-host limits.
  * 
  * Input:
  * <ul>
@@ -65,10 +61,10 @@ import org.slf4j.LoggerFactory;
  * </pre>
  * 
  * </li>
- * <li>domain name, limits and default score
+ * <li>host name (leading <code>www.</code> may be stripped), limits and default score
  * 
  * <pre>
- * &lt;domain_name&gt; \t &lt;rank&gt; \t &lt;max_urls&gt; \t &lt;max_hosts&gt; \t  &lt;max_urls_per_host&gt; \t &lt;default_score&gt;
+ * &lt;host_name&gt; \t &lt;rank&gt; \t &lt;max_urls&gt; \t &lt;default_score&gt;
  * </pre>
  * 
  * </li>
@@ -85,7 +81,7 @@ import org.slf4j.LoggerFactory;
  * 0.001 * default_score * log10(1 + inlink_count)
  * </pre>
  */
-public class UrlSampler extends Configured implements Tool {
+public class UrlSamplerHost extends Configured implements Tool {
 
   private static final Logger LOG = LoggerFactory
       .getLogger(MethodHandles.lookup().lookupClass());
@@ -131,12 +127,31 @@ public class UrlSampler extends Configured implements Tool {
     private DomainScorePair outputKey = new DomainScorePair();
     private TextCountPair outputValue = new TextCountPair();
 
+    /**
+     * Strip leading <code>www.</code> from host name.
+     * 
+     * But do not strip if the host name is &quote;www.tld&quote; (e.g.,
+     * <code>www.com</code>).
+     * 
+     * @param host
+     *          name
+     * @return host name with leading www. stripped
+     */
+    private static String hostStripWWW(String host) {
+      // min. length: 4 + 3 + 1 = 8 (www. + 1-letter-domain + .2-letter-tld)
+      if (host.length() >= 8 && host.startsWith("www.")
+          && host.indexOf('.', 4) != -1) {
+        host = host.substring(4);
+      }
+      return host;
+    }
+
     @Override
     public void map(Text key, Text value, Context context)
         throws IOException, InterruptedException {
 
       if (!URL_PATTERN.matcher(key.toString()).find()) {
-        // got <domain_name, limits>
+        // got <host_name, limits>
         outputKey.set(key, Float.MAX_VALUE);
         outputValue.set(value, -1);
         context.write(outputKey, outputValue);
@@ -145,10 +160,10 @@ public class UrlSampler extends Configured implements Tool {
 
       // got <url, sampling_factor>
       String url = key.toString();
-      String domain;
+      String host;
       try {
         URL u = new URL(url);
-        domain = URLPartitioner.getDomainName(u.getHost());
+        host = hostStripWWW(u.getHost());
       } catch (Exception e) {
         LOG.warn("Malformed URL: '{}', skipping ({})", url, e.getMessage());
         context.getCounter("UrlSampler", "MALFORMED_URL").increment(1);
@@ -162,7 +177,7 @@ public class UrlSampler extends Configured implements Tool {
         LOG.error("Value is not a long integer (url: {} value: {})", url,
             value);
       }
-      outputKey.set(domain, (float) (Math.random() * count));
+      outputKey.set(host, (float) (Math.random() * count));
       outputValue.set(key, count);
       context.write(outputKey, outputValue);
     }
@@ -171,39 +186,29 @@ public class UrlSampler extends Configured implements Tool {
   public static class SampleReducer
       extends Reducer<DomainScorePair, TextCountPair, Text, Text> {
 
-    private int maxUrlsPerDomain = 40;
-    private int maxHostsPerDomain = 2;
-    private int maxUrlsPerHost = 20;
+    private int maxUrlsPerHost = -1; // -1 : sample randomly
     private float defaultScore = .001f;
     private Text meta = new Text();
 
     @Override
     public void setup(Context context) {
       Configuration conf = context.getConfiguration();
-      maxUrlsPerDomain = conf.getInt("urlsample.urls.per.domain",
-          maxUrlsPerDomain);
       maxUrlsPerHost = conf.getInt("urlsample.urls.per.host", maxUrlsPerHost);
-      maxHostsPerDomain = conf.getInt("urlsample.hosts.per.domain",
-          maxHostsPerDomain);
       defaultScore = conf.getFloat("urlsample.default.score", defaultScore);
     }
 
     @Override
     public void reduce(DomainScorePair key, Iterable<TextCountPair> values,
         Context context) throws IOException, InterruptedException {
-      int maxUrls = maxUrlsPerDomain;
-      int maxHosts = maxHostsPerDomain;
-      int maxPerHost = maxUrlsPerHost;
-      float domainScore = defaultScore;
+      int maxUrls = maxUrlsPerHost;
+      float hostScore = defaultScore;
       int nUrls = 0;
       int nUrlsSampled = 0;
-      int skippedMaxUrls = 0;
-      int skippedMaxHosts = 0;
       int skippedMaxUrlsPerHost = 0;
+      int skippedRandom = 0;
       double sumScores = .0;
-      String domain = null;
+      String host = null;
       Text limits = null;
-      Map<String, int[]> hosts = null;
 
       for (TextCountPair val : values) {
         Text text = val.getText();
@@ -214,74 +219,83 @@ public class UrlSampler extends Configured implements Tool {
           continue;
         } else if (limits != null) {
           String[] l = limits.toString().split("\t");
-          if (l.length >= 5) {
+          if (l.length >= 3) {
             try {
               // long rank = l[0]
               maxUrls = Integer.parseInt(l[1]);
-              maxHosts = Integer.parseInt(l[2]);
-              maxPerHost = Integer.parseInt(l[3]);
-              domainScore = Float.parseFloat(l[4]);
+              hostScore = Float.parseFloat(l[2]);
             } catch (NumberFormatException e) {
-              LOG.warn("Invalid domain limits: {}", limits, e);
+              LOG.warn("Invalid host limits: {}", limits, e);
             }
           }
           limits = null;
         }
-        if (domain == null) {
+        if (host == null) {
           // processing first URL in values
-          domain = key.getDomain().toString();
-          hosts = new HashMap<>();
-        }
-        String host = null;
-        try {
-          host = new URL(text.toString()).getHost().toLowerCase(Locale.ROOT);
-          if (host.endsWith(domain)) {
-            // clip common domain name suffix to save storage space in map keys
-            host = host.substring(0, host.length() - domain.length());
-          } else {
-            LOG.warn("Host {} does not have domain {} as suffix!", host,
-                domain);
-          }
-        } catch (MalformedURLException e) {
-          context.getCounter("UrlSampler", "MALFORMED_URL").increment(1);
-          continue;
+          host = key.getDomain().toString();
         }
         nUrls++;
         if (nUrlsSampled > maxUrls) {
-          skippedMaxUrls++;
-          continue;
-        }
-        int[] nUrlsPerHost = hosts.get(host);
-        if (nUrlsPerHost != null) {
-          if (nUrlsPerHost[0]++ > maxPerHost) {
+          if (maxUrls > -1) {
             skippedMaxUrlsPerHost++;
             continue;
+          } else {
+            // no limits, sample randomly with low probability
+            double sampleProb = (.1d / (1 + nUrlsSampled))
+                * Math.log10(1 + count);
+            if (sampleProb < Math.random()) {
+              skippedRandom++;
+              continue;
+            }
           }
-        } else {
-          if (hosts.size() >= maxHosts) {
-            skippedMaxHosts++;
-            continue;
-          }
-          hosts.put(host, new int[] { 0 });
         }
         nUrlsSampled++;
-        double score = .001d * domainScore * Math.log10(1 + count);
+        double score = .001d * hostScore * Math.log10(1 + count);
         sumScores += score;
         meta.set(String.format(Locale.ROOT, "nutch.score=%.12f", score));
         context.write(text, meta);
       }
-      if (nUrls == 0)
-        return;
-      context.getCounter("UrlSampler", "SKIPPED_MAX_URLS")
-          .increment(skippedMaxUrls);
-      context.getCounter("UrlSampler", "SKIPPED_MAX_URLS_PER_HOST")
-          .increment(skippedMaxUrlsPerHost);
-      context.getCounter("UrlSampler", "SKIPPED_MAX_HOSTS")
-          .increment(skippedMaxHosts);
-      LOG.info(
-          "Sampled for domain {} : {} hosts, {} URLs ({} skipped: {} max. URLs, {} max. per host, {} max. hosts), sum of scores = {}",
-          domain, hosts.size(), nUrlsSampled, (nUrls - nUrlsSampled),
-          skippedMaxUrls, skippedMaxUrlsPerHost, skippedMaxHosts, sumScores);
+      // hosts == reduce input groups
+      context.getCounter("UrlSamplerHost", "HOSTS").increment(1);
+      // URLs == map output records, reduce input records
+      context.getCounter("UrlSamplerHost", "URLS").increment(nUrls);
+      if (nUrls > 0) {
+        if (maxUrls > -1) {
+          context.getCounter("UrlSamplerHost", "HOSTS_WITH_LIMIT").increment(1);
+          context.getCounter("UrlSamplerHost", "URLS_HOST_WITH_LIMIT")
+              .increment(nUrls);
+        } else {
+          context.getCounter("UrlSamplerHost", "HOSTS_WITHOUT_LIMIT")
+              .increment(1);
+          context.getCounter("UrlSamplerHost", "URLS_HOST_WITHOUT_LIMIT")
+              .increment(nUrls);
+        }
+        if (nUrlsSampled > 0) {
+          context.getCounter("UrlSamplerHost", "URLS_SAMPLED")
+              .increment(nUrlsSampled);
+          context.getCounter("UrlSamplerHost", "HOSTS_SAMPLED").increment(1);
+          if (maxUrls > -1) {
+            context.getCounter("UrlSamplerHost", "HOSTS_WITH_LIMIT_SAMPLED")
+                .increment(1);
+            context.getCounter("UrlSamplerHost", "URLS_HOST_WITH_LIMIT_SAMPLED")
+                .increment(nUrlsSampled);
+          } else {
+            context.getCounter("UrlSamplerHost", "HOSTS_WITHOUT_LIMIT_SAMPLED")
+                .increment(1);
+            context
+                .getCounter("UrlSamplerHost", "URLS_HOST_WITHOUT_LIMIT_SAMPLED")
+                .increment(nUrlsSampled);
+          }
+        }
+        context.getCounter("UrlSamplerHost", "SKIPPED_MAX_URLS_PER_HOST")
+            .increment(skippedMaxUrlsPerHost);
+        context.getCounter("UrlSamplerHost", "SKIPPED_RANDOM")
+            .increment(skippedRandom);
+        LOG.info(
+            "Sampled for host {} : {} URLs ({} skipped: {} max. per host, {} random), sum of scores = {}",
+            host, nUrlsSampled, (nUrls - nUrlsSampled), skippedMaxUrlsPerHost,
+            skippedRandom, sumScores);
+      }
     }
   }
 
@@ -290,13 +304,13 @@ public class UrlSampler extends Configured implements Tool {
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
         Locale.ROOT);
     long start = System.currentTimeMillis();
-    LOG.info("UrlSampler: starting at {}", sdf.format(start));
+    LOG.info("UrlSamplerHost: starting at {}", sdf.format(start));
 
     Configuration conf = getConf();
     conf.setInt("partition.url.seed", new Random().nextInt());
 
-    Job job = Job.getInstance(conf, UrlSampler.class.getName());
-    job.setJarByClass(UrlSampler.class);
+    Job job = Job.getInstance(conf, UrlSamplerHost.class.getName());
+    job.setJarByClass(UrlSamplerHost.class);
     job.setMapperClass(SampleMapper.class);
     job.setPartitionerClass(Generator2.Selector.class);
     job.setSortComparatorClass(Generator2.ScoreComparator.class);
@@ -333,13 +347,13 @@ public class UrlSampler extends Configured implements Tool {
     }
 
     long end = System.currentTimeMillis();
-    LOG.info("UrlSampler: finished at {}, elapsed: {}", sdf.format(end),
+    LOG.info("UrlSamplerHost: finished at {}, elapsed: {}", sdf.format(end),
         TimingUtil.elapsedTime(start, end));
   }
 
   public void usage() {
     System.err
-        .println("Usage: UrlSampler [-D...] <domain_limits> <input_dir>... <output_dir>\n");
+      .println("Usage: UrlSamplerHost [-D...] <host_limits> <input_dir>... <output_dir>\n");
   }
 
   @Override
@@ -358,14 +372,14 @@ public class UrlSampler extends Configured implements Tool {
     try {
       sample(inputs, output);
     } catch (Exception e) {
-      LOG.error("UrlSampler: " + StringUtils.stringifyException(e));
+      LOG.error("UrlSamplerHost: " + StringUtils.stringifyException(e));
       return -1;
     }
     return 0;
   }
 
   public static void main(String[] args) throws Exception {
-    int res = ToolRunner.run(NutchConfiguration.create(), new UrlSampler(),
+    int res = ToolRunner.run(NutchConfiguration.create(), new UrlSamplerHost(),
         args);
     System.exit(res);
   }
