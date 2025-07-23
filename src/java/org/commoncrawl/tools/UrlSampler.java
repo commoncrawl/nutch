@@ -23,13 +23,14 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
@@ -42,14 +43,12 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.KeyValueTextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.crawl.Generator2;
 import org.apache.nutch.crawl.Generator2.DomainScorePair;
 import org.apache.nutch.crawl.URLPartitioner;
 import org.apache.nutch.util.NutchConfiguration;
-import org.apache.nutch.util.TimingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -287,10 +286,9 @@ public class UrlSampler extends Configured implements Tool {
 
   private void sample(Path[] inputs, Path output) throws Exception {
 
-    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
-        Locale.ROOT);
-    long start = System.currentTimeMillis();
-    LOG.info("UrlSampler: starting at {}", sdf.format(start));
+    StopWatch stopWatch = new StopWatch();
+    stopWatch.start();
+    LOG.info("UrlSampler: starting");
 
     Configuration conf = getConf();
     conf.setInt("partition.url.seed", new Random().nextInt());
@@ -332,9 +330,9 @@ public class UrlSampler extends Configured implements Tool {
       throw e;
     }
 
-    long end = System.currentTimeMillis();
-    LOG.info("UrlSampler: finished at {}, elapsed: {}", sdf.format(end),
-        TimingUtil.elapsedTime(start, end));
+    stopWatch.stop();
+    LOG.info("UrlSampler: finished}, elapsed: {} ms",
+        stopWatch.getTime(TimeUnit.MILLISECONDS));
   }
 
   public void usage() {
@@ -358,7 +356,7 @@ public class UrlSampler extends Configured implements Tool {
     try {
       sample(inputs, output);
     } catch (Exception e) {
-      LOG.error("UrlSampler: " + StringUtils.stringifyException(e));
+      LOG.error("UrlSampler: ", e);
       return -1;
     }
     return 0;

@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -38,6 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -61,7 +61,6 @@ import org.apache.nutch.protocol.ProtocolOutput;
 import org.apache.nutch.scoring.ScoringFilterException;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
-import org.apache.nutch.util.TimingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -692,7 +691,7 @@ public class SitemapInjector extends Injector {
         try {
           protocol = protocolFactory.getProtocol(url);
         } catch (ProtocolNotFound e) {
-          LOG.error("protocol not found " + url);
+          LOG.error("Protocol not found: {}", url);
           context
               .getCounter("SitemapInjector",
                   "failed to fetch sitemap content, protocol not found")
@@ -700,13 +699,13 @@ public class SitemapInjector extends Injector {
           return null;
         }
 
-        LOG.info("fetching sitemap " + url);
+        LOG.info("Fetching sitemap: {}", url);
         ProtocolOutput protocolOutput = null;
         origUrl = url;
         int redirects = 0;
         do {
           if (redirects > 0) {
-            LOG.info("fetching redirected sitemap " + url);
+            LOG.info("Fetching redirected sitemap: {}", url);
           }
           FetchSitemapCallable fetch = new FetchSitemapCallable(protocol, url,
               context);
@@ -915,10 +914,7 @@ public class SitemapInjector extends Injector {
           try {
             url = filterNormalize(url);
           } catch (Exception e) {
-            if (LOG.isWarnEnabled()) {
-              LOG.warn("Skipping {}: {}", url,
-                  StringUtils.stringifyException(e));
-            }
+            LOG.warn("Skipping {}:", url, e);
             url = null;
           }
           if (url == null) {
@@ -938,10 +934,9 @@ public class SitemapInjector extends Injector {
             try {
               scfilters.injectedScore(value, datum);
             } catch (ScoringFilterException e) {
-              if (LOG.isWarnEnabled()) {
-                LOG.warn("Cannot filter injected score for url " + url
-                    + ", using default (" + e.getMessage() + ")");
-              }
+              LOG.warn(
+                  "Cannot filter injected score for url {}, using default ({})",
+                  url, e.getMessage());
             }
 
             context.getCounter("SitemapInjector", "urls from sitemaps injected")
@@ -1015,18 +1010,16 @@ public class SitemapInjector extends Injector {
       boolean filterNormalizeAll)
       throws IOException, ClassNotFoundException, InterruptedException {
 
-    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    long start = System.currentTimeMillis();
-    if (LOG.isInfoEnabled()) {
-      LOG.info("SitemapInjector: starting at " + sdf.format(start));
-      LOG.info("SitemapInjector: crawlDb: " + crawlDb);
-      LOG.info("SitemapInjector: urlDir: " + urlDir);
-      // for all sitemap URLs listed in text input file(s)
-      // fetch and parse the sitemap, and map the contained URLs to
-      // <url,CrawlDatum> pairs
-      LOG.info(
-          "SitemapInjector: Fetching sitemaps, injecting URLs from sitemaps to crawl db entries.");
-    }
+    StopWatch stopWatch = new StopWatch();
+    stopWatch.start();
+    LOG.info("SitemapInjector: starting");
+    LOG.info("SitemapInjector: crawlDb: {}", crawlDb);
+    LOG.info("SitemapInjector: urlDir: {}", urlDir);
+    // for all sitemap URLs listed in text input file(s)
+    // fetch and parse the sitemap, and map the contained URLs to
+    // <url,CrawlDatum> pairs
+    LOG.info(
+        "SitemapInjector: Fetching sitemaps, injecting URLs from sitemaps to crawl db entries.");
 
     // set configuration
     Configuration conf = getConf();
@@ -1101,13 +1094,15 @@ public class SitemapInjector extends Injector {
             counter.getName()));
       }
 
-      long end = System.currentTimeMillis();
-      LOG.info("SitemapInjector: finished fetching and processing sitemaps at " + sdf.format(end) + ", elapsed: "
-          + TimingUtil.elapsedTime(start, end));
+      stopWatch.suspend();
+      LOG.info(
+          "SitemapInjector: finished fetching and processing sitemaps, elapsed: {}",
+          stopWatch.getTime(TimeUnit.MILLISECONDS));
 
       if (runStepOneOnly) {
         return;
       }
+      stopWatch.resume();
 
       long numOutputRecords = sitemapJob.getCounters()
           .findCounter(TaskCounter.REDUCE_OUTPUT_RECORDS).getValue();
@@ -1161,9 +1156,9 @@ public class SitemapInjector extends Injector {
       tempDir.getFileSystem(conf).delete(tempDir, true);
     }
 
-    long end = System.currentTimeMillis();
-    LOG.info("SitemapInjector: finished at " + sdf.format(end) + ", elapsed: "
-        + TimingUtil.elapsedTime(start, end));
+    stopWatch.stop();
+    LOG.info("SitemapInjector: finished, elapsed: ",
+        stopWatch.getTime(TimeUnit.MILLISECONDS));
   }
 
   public void usage(String errorMessage) {

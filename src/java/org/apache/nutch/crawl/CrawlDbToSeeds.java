@@ -116,7 +116,7 @@ public class CrawlDbToSeeds extends CrawlDbReader {
       throws IOException, ClassNotFoundException, InterruptedException {
 
     LOG.info("CrawlDbToSeeds: starting");
-    LOG.info("CrawlDb db: " + crawlDb);
+    LOG.info("CrawlDb: {}", crawlDb);
 
     Path outFolder = new Path(output);
 
@@ -137,7 +137,7 @@ public class CrawlDbToSeeds extends CrawlDbReader {
       jobConf.setInt("retry", retry);
     if (expr != null) {
       jobConf.set("expr", expr);
-      LOG.info("CrawlDb db: expr: " + expr);
+      LOG.info("CrawlDb: expr: {}", expr);
     }
     if (sample != null) {
       jobConf.setFloat("sample", sample);

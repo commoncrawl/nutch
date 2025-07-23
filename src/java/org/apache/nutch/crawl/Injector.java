@@ -482,10 +482,12 @@ public class Injector extends NutchTool implements Tool {
               "Injector: Total urls with status gone removed from CrawlDb (db.update.purge.404): {}",
               urlsPurged404);
         }
-
-        stopWatch.stop();
-        LOG.info("Injector: finished, elapsed: {} ms", stopWatch.getTime(TimeUnit.MILLISECONDS));
       }
+
+      stopWatch.stop();
+      LOG.info("Injector: finished, elapsed: {} ms",
+          stopWatch.getTime(TimeUnit.MILLISECONDS));
+
     } catch (IOException | InterruptedException | ClassNotFoundException | NullPointerException e) {
       LOG.error("Injector job failed: {}", e.getMessage());
       NutchJob.cleanupAfterFailure(tempCrawlDb, lock, fs);

@@ -47,7 +47,7 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCapture> {
 
     TaskID taskid = context.getTaskAttemptID().getTaskID();
     int partition = taskid.getId();
-    LOG.info("Partition: " + partition);
+    LOG.info("Partition: {}", partition);
 
     Configuration conf = context.getConfiguration();
     Path outputPath = getOutputPath(context);

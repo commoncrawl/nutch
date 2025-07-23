@@ -18,9 +18,10 @@ package org.apache.nutch.crawl;
 
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
-import java.text.SimpleDateFormat;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,13 +34,11 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.protocol.ProtocolStatus;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
-import org.apache.nutch.util.TimingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -267,9 +266,9 @@ public class DedupRedirectsJob extends DeduplicationJob {
       }
     }
 
-    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    long start = System.currentTimeMillis();
-    LOG.info("DedupRedirectsJob: starting at " + sdf.format(start));
+    StopWatch stopWatch = new StopWatch();
+    stopWatch.start();
+    LOG.info("DedupRedirectsJob: starting");
 
     Path tempDir = new Path(crawlDb, "dedup-temp-"
         + Integer.toString(new Random().nextInt(Integer.MAX_VALUE)));
@@ -311,11 +310,11 @@ public class DedupRedirectsJob extends DeduplicationJob {
       if (g != null) {
         Counter counter = g.findCounter("Documents marked as duplicate");
         numDuplicates = counter.getValue();
-        LOG.info(
-            "Deduplication: " + (int) numDuplicates + " documents marked as duplicates");
+        LOG.info("Deduplication: {} documents marked as duplicates",
+            numDuplicates);
       }
     } catch (IOException | InterruptedException | ClassNotFoundException e) {
-      LOG.error("DeduplicationJob: " + StringUtils.stringifyException(e));
+      LOG.error("DeduplicationJob: ", e);
       fs.delete(tempDir, true);
       return -1;
     }
@@ -331,9 +330,7 @@ public class DedupRedirectsJob extends DeduplicationJob {
     } else {
       // temporary output is the deduped crawldb but not in proper sorting
       // (sorted by redirect target), use "merge" job to achieve proper sorting
-      if (LOG.isInfoEnabled()) {
-        LOG.info("Redirect deduplication: writing CrawlDb.");
-      }
+      LOG.info("Redirect deduplication: writing CrawlDb.");
 
       Job mergeJob = CrawlDb.createJob(getConf(), crawlDb);
       FileInputFormat.addInputPath(mergeJob, tempDir);
@@ -356,7 +353,7 @@ public class DedupRedirectsJob extends DeduplicationJob {
           throw new RuntimeException(message);
         }
       } catch (IOException | InterruptedException | ClassNotFoundException e) {
-        LOG.error("DedupRedirectsJob: " + StringUtils.stringifyException(e));
+        LOG.error("DedupRedirectsJob: ", e);
         fs.delete(tempDir, true);
         NutchJob.cleanupAfterFailure(outPath, lock, fs);
         return -1;
@@ -368,9 +365,9 @@ public class DedupRedirectsJob extends DeduplicationJob {
     // clean up
     fs.delete(tempDir, true);
 
-    long end = System.currentTimeMillis();
-    LOG.info("DedupRedirectsJob finished at " + sdf.format(end) + ", elapsed: "
-        + TimingUtil.elapsedTime(start, end));
+    stopWatch.stop();
+    LOG.info("DedupRedirectsJob finished, elapsed: {} ms",
+        stopWatch.getTime(TimeUnit.MILLISECONDS));
 
     return 0;
   }

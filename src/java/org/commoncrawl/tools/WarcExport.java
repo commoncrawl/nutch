@@ -16,6 +16,7 @@
  */
 package org.commoncrawl.tools;
 
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileStatus;
@@ -37,17 +38,15 @@ import org.apache.nutch.parse.ParseData;
 import org.apache.nutch.protocol.Content;
 import org.apache.nutch.util.HadoopFSUtil;
 import org.apache.nutch.util.NutchConfiguration;
-import org.apache.nutch.util.TimingUtil;
 import org.commoncrawl.util.WarcCapture;
 import org.commoncrawl.util.WarcOutputFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 public class WarcExport extends Configured implements Tool {
   public static Logger LOG = LoggerFactory.getLogger(WarcExport.class);
@@ -177,10 +176,9 @@ public class WarcExport extends Configured implements Tool {
     job.setOutputFormatClass(WarcOutputFormat.class);
     WarcOutputFormat.setOutputPath(job, outputDir);
 
-    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
-        Locale.ROOT);
-    long start = System.currentTimeMillis();
-    LOG.info("WarcExport: starting at {}", sdf.format(start));
+    StopWatch stopWatch = new StopWatch();
+    stopWatch.start();
+    LOG.info("WarcExport: starting");
 
     try {
       boolean success = job.waitForCompletion(true);
@@ -195,9 +193,9 @@ public class WarcExport extends Configured implements Tool {
       LOG.error("WarcExport job failed: {}", e.getMessage());
       throw e;
     }
-    long end = System.currentTimeMillis();
-    LOG.info("WarcExport: finished at {}, elapsed: {}", sdf.format(end),
-        TimingUtil.elapsedTime(start, end));
+    stopWatch.stop();
+    LOG.info("WarcExport: finished, elapsed: {} ms",
+        stopWatch.getTime(TimeUnit.MILLISECONDS));
   }
 
   @Override

@@ -21,13 +21,13 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
@@ -38,14 +38,12 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.KeyValueTextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.net.URLFilterException;
 import org.apache.nutch.net.URLFilters;
 import org.apache.nutch.net.URLNormalizers;
 import org.apache.nutch.util.NutchConfiguration;
-import org.apache.nutch.util.TimingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -270,10 +268,9 @@ public class UrlCleaner extends Configured implements Tool {
   public void clean(Path[] inputs, Path output, boolean checkDomain,
       OutputKeyType outputKeyType, boolean sumValues) throws Exception {
 
-    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
-        Locale.ROOT);
-    long start = System.currentTimeMillis();
-    LOG.info("UrlCleaner: starting at {}", sdf.format(start));
+    StopWatch stopWatch = new StopWatch();
+    stopWatch.start();
+    LOG.info("UrlCleaner: starting");
 
     Configuration conf = getConf();
     conf.setBoolean(CHECK_DOMAIN, checkDomain);
@@ -315,9 +312,9 @@ public class UrlCleaner extends Configured implements Tool {
       throw e;
     }
 
-    long end = System.currentTimeMillis();
-    LOG.info("UrlCleaner: finished at {}, elapsed: {}", sdf.format(end),
-        TimingUtil.elapsedTime(start, end));
+    stopWatch.stop();
+    LOG.info("UrlCleaner: finished, elapsed: {} ms",
+        stopWatch.getTime(TimeUnit.MILLISECONDS));
   }
 
   public void usage() {
@@ -360,7 +357,7 @@ public class UrlCleaner extends Configured implements Tool {
     try {
       clean(inputs, output, checkDomain, outputKeyType, sumValues);
     } catch (Exception e) {
-      LOG.error("UrlCleaner: " + StringUtils.stringifyException(e));
+      LOG.error("UrlCleaner: ", e);
       return -1;
     }
     return 0;

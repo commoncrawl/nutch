@@ -25,16 +25,17 @@ import java.io.Reader;
 import java.lang.invoke.MethodHandles;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -71,7 +72,6 @@ import org.apache.nutch.scoring.ScoringFilterException;
 import org.apache.nutch.scoring.ScoringFilters;
 import org.apache.nutch.util.NutchConfiguration;
 import org.apache.nutch.util.NutchJob;
-import org.apache.nutch.util.TimingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1163,9 +1163,9 @@ public class Generator2 extends Configured implements Tool {
     FileSystem tempFs = tempDir.getFileSystem(getConf());
     Path stage1Dir = null, stage2Dir = null;
 
-    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    long start = System.currentTimeMillis();
-    LOG.info("Generator: starting at {}", sdf.format(start));
+    StopWatch stopWatch = new StopWatch();
+    stopWatch.start();
+    LOG.info("Generator: starting");
     LOG.info("Generator: Selecting best-scoring urls due for fetch.");
     LOG.info("Generator: filtering: {}", filter);
     LOG.info("Generator: normalizing: {}", norm);
@@ -1341,9 +1341,9 @@ public class Generator2 extends Configured implements Tool {
       tempFs.delete(tempDir, true);
     }
 
-    long end = System.currentTimeMillis();
-    LOG.info("Generator: finished at {}, elapsed: {}", sdf.format(end),
-        TimingUtil.elapsedTime(start, end));
+    stopWatch.stop();
+    LOG.info("Generator: finished, elapsed: {} ms",
+        stopWatch.getTime(TimeUnit.MILLISECONDS));
 
     Path[] patharray = new Path[generatedSegments.size()];
     return generatedSegments.toArray(patharray);
