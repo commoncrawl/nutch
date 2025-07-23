@@ -32,7 +32,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.input.KeyValueTextInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.nutch.crawl.CrawlDb;
@@ -68,10 +67,11 @@ public class UpdateHostDb extends Configured implements Tool {
   public static final String HOSTDB_STRING_FIELDS = "hostdb.string.fields";
   public static final String HOSTDB_PERCENTILES = "hostdb.percentiles";
   public static final String HOSTDB_CRAWLDATUM_PROCESSORS = "hostdb.crawldatum.processors";
+  public static final String HOSTDB_URL_LIMIT = "hostdb.url.limit";
   
   private void updateHostDb(Path hostDb, Path crawlDb, Path topHosts,
     boolean checkFailed, boolean checkNew, boolean checkKnown,
-    boolean force, boolean filter, boolean normalize) throws Exception {
+    boolean force, boolean filter, boolean normalize, long urlLimit) throws Exception {
 
     StopWatch stopWatch = new StopWatch();
     stopWatch.start();
@@ -126,6 +126,7 @@ public class UpdateHostDb extends Configured implements Tool {
     conf.setBoolean(HOSTDB_FORCE_CHECK, force);
     conf.setBoolean(HOSTDB_URL_FILTERING, filter);
     conf.setBoolean(HOSTDB_URL_NORMALIZING, normalize);
+    conf.setLong(HOSTDB_URL_LIMIT, urlLimit);
     conf.setClassLoader(Thread.currentThread().getContextClassLoader());
     
     try {
@@ -163,7 +164,7 @@ public class UpdateHostDb extends Configured implements Tool {
     if (args.length < 2) {
       System.err.println("Usage: UpdateHostDb -hostdb <hostdb> " +
         "[-tophosts <tophosts>] [-crawldb <crawldb>] [-checkAll] [-checkFailed]" +
-        " [-checkNew] [-checkKnown] [-force] [-filter] [-normalize]");
+        " [-checkNew] [-checkKnown] [-force] [-filter] [-normalize] [-urlLimit <N>]");
       return -1;
     }
 
@@ -175,24 +176,24 @@ public class UpdateHostDb extends Configured implements Tool {
     boolean checkNew = false;
     boolean checkKnown = false;
     boolean force = false;
-
     boolean filter = false;
     boolean normalize = false;
+    long urlLimit = -1l;
 
     for (int i = 0; i < args.length; i++) {
       if (args[i].equals("-hostdb")) {
         hostDb = new Path(args[i + 1]);
-        LOG.info("UpdateHostDb: hostdb: " + hostDb);
+        LOG.info("UpdateHostDb: hostdb: {}", hostDb);
         i++;
       }
       if (args[i].equals("-crawldb")) {
         crawlDb = new Path(args[i + 1]);
-        LOG.info("UpdateHostDb: crawldb: " + crawlDb);
+        LOG.info("UpdateHostDb: crawldb: {}", crawlDb);
         i++;
       }
       if (args[i].equals("-tophosts")) {
         topHosts = new Path(args[i + 1]);
-        LOG.info("UpdateHostDb: tophosts: " + topHosts);
+        LOG.info("UpdateHostDb: tophosts: {}", topHosts);
         i++;
       }
 
@@ -226,6 +227,11 @@ public class UpdateHostDb extends Configured implements Tool {
         LOG.info("UpdateHostDb: normalizing enabled");
         normalize = true;
       }
+      if (args[i].equals("-urlLimit")) {
+        urlLimit = Long.valueOf(args[i + 1]);
+        LOG.info("UpdateHostDb: URL limit set to {}", urlLimit);
+        i++;
+      }
     }
 
     if (hostDb == null) {
@@ -235,11 +241,11 @@ public class UpdateHostDb extends Configured implements Tool {
 
     try {
       updateHostDb(hostDb, crawlDb, topHosts, checkFailed, checkNew,
-        checkKnown, force, filter, normalize);
+        checkKnown, force, filter, normalize, urlLimit);
 
       return 0;
     } catch (Exception e) {
-      LOG.error("UpdateHostDb: " + StringUtils.stringifyException(e));
+      LOG.error("UpdateHostDb:", e);
       return -1;
     }
   }

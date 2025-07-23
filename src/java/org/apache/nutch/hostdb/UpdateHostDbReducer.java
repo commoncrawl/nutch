@@ -60,6 +60,7 @@ public class UpdateHostDbReducer
   protected static boolean checkKnown = false;
   protected static boolean checkAny = false;
   protected static boolean force = false;
+  protected static long urlLimit = -1l;
   protected static long now = new Date().getTime();
   protected static String[] numericFields;
   protected static String[] stringFields;
@@ -85,6 +86,7 @@ public class UpdateHostDbReducer
     checkKnown = conf.getBoolean(UpdateHostDb.HOSTDB_CHECK_KNOWN, false);
     checkAny = checkNew || checkKnown || checkFailed;
     force = conf.getBoolean(UpdateHostDb.HOSTDB_FORCE_CHECK, false);
+    urlLimit = conf.getLong(UpdateHostDb.HOSTDB_URL_LIMIT,-1l);
     numericFields = conf.getStrings(UpdateHostDb.HOSTDB_NUMERIC_FIELDS);
     stringFields = conf.getStrings(UpdateHostDb.HOSTDB_STRING_FIELDS);
     percentiles = conf.getInts(UpdateHostDb.HOSTDB_PERCENTILES);
@@ -113,9 +115,9 @@ public class UpdateHostDbReducer
           // Add to array
           crawlDatumProcessors[i] = processorImpl;
         } catch (Exception e) {
-          LOG.error("Unable to instantiate crawldatum processor: "
-              + crawlDatumProcessorClassnames[i] + " because: "
-              + e.getMessage(), e);
+          LOG.error(
+              "Unable to instantiate crawldatum processor: {} because: {}",
+              crawlDatumProcessorClassnames[i], e.getMessage(), e);
         }
       }
     }
@@ -221,7 +223,7 @@ public class UpdateHostDbReducer
                 try {
                   metadataValue = buffer.getMetaData().get(stringFieldWritables[i]).toString();
                 } catch (Exception e) {
-                  LOG.error("Metadata field " + stringFields[i] + " is probably not a numeric value");
+                  LOG.error("Metadata field {} is probably not a numeric value", stringFields[i]);
                 }
               
                 // Does the value exist?
@@ -374,6 +376,14 @@ public class UpdateHostDbReducer
       hostDatum.getMetaData().put(new Text("min." + entry.getKey()), new FloatWritable(entry.getValue()));
     }
     
+    // Impose limits on minimum number of URLs?
+    if (urlLimit > -1l) {
+      if (hostDatum.numRecords() < urlLimit) {
+        context.getCounter("UpdateHostDb", "url_limit_not_reached").increment(1);
+        return;
+      }
+    }
+    
     context.getCounter("UpdateHostDb", "total_hosts").increment(1);
 
     // See if this record is to be checked
@@ -385,7 +395,7 @@ public class UpdateHostDbReducer
       try {
         queue.put(resolverThread);
       } catch (InterruptedException e) {
-        LOG.error("UpdateHostDb: " + StringUtils.stringifyException(e));
+        LOG.error("UpdateHostDb:", e);
       }
 
       // Do not progress, the datum will be written in the resolver thread

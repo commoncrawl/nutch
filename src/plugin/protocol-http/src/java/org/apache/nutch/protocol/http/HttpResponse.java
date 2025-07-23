@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PushbackInputStream;
 import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -89,9 +90,7 @@ public class HttpResponse implements Response {
       throw new HttpException("Unknown scheme (not http/https) for url:" + url);
     }
 
-    if (Http.LOG.isTraceEnabled()) {
-      Http.LOG.trace("fetching " + url);
-    }
+    Http.LOG.trace("fetching {}", url);
 
     String path = url.getFile();
     if (!path.startsWith("/")) {
@@ -119,20 +118,26 @@ public class HttpResponse implements Response {
     Socket socket = null;
 
     try {
-      socket = new Socket(); // create the socket
+      boolean useProxy = http.useProxy(url);
+      if (useProxy) {
+        Proxy proxy = new Proxy(Proxy.Type.HTTP,
+            new InetSocketAddress(http.getProxyHost(), http.getProxyPort()));
+        socket = new Socket(proxy);
+      } else {
+        socket = new Socket();
+      }
       socket.setSoTimeout(http.getTimeout());
 
       // connect
-      String sockHost = http.useProxy(url) ? http.getProxyHost() : host;
       int sockPort = http.useProxy(url) ? http.getProxyPort() : port;
-      InetSocketAddress sockAddr = new InetSocketAddress(sockHost, sockPort);
+      InetSocketAddress sockAddr = new InetSocketAddress(host, port);
       socket.connect(sockAddr, http.getTimeout());
 
       if (scheme == Scheme.HTTPS) {
         SSLSocket sslsocket = null;
 
         try {
-          sslsocket = getSSLSocket(socket, sockHost, sockPort);
+          sslsocket = getSSLSocket(socket, host, port);
           sslsocket.startHandshake();
         } catch (Exception e) {
           Http.LOG.debug("SSL connection to {} failed with: {}", url,
@@ -188,9 +193,7 @@ public class HttpResponse implements Response {
 
       String userAgent = http.getUserAgent();
       if ((userAgent == null) || (userAgent.length() == 0)) {
-        if (Http.LOG.isErrorEnabled()) {
-          Http.LOG.error("User-agent is not set!");
-        }
+        Http.LOG.error("User-agent is not set!");
       } else {
         reqStr.append("User-Agent: ");
         reqStr.append(userAgent);
@@ -308,9 +311,7 @@ public class HttpResponse implements Response {
         } else if ("deflate".equals(contentEncoding)) {
           content = http.processDeflateEncoded(content, url);
         } else {
-          if (Http.LOG.isTraceEnabled()) {
-            Http.LOG.trace("fetched " + content.length + " bytes from " + url);
-          }
+          Http.LOG.trace("fetched {} bytes from {}", content.length, url);
         }
         if (httpHeaders != null) {
           httpHeaders.append("\r\n");
@@ -474,9 +475,7 @@ public class HttpResponse implements Response {
     ByteArrayOutputStream out = new ByteArrayOutputStream(Http.BUFFER_SIZE);
 
     while (true) {
-      if (Http.LOG.isTraceEnabled()) {
-        Http.LOG.trace("Http: starting chunk");
-      }
+      Http.LOG.trace("Http: starting chunk");
 
       readLine(in, line, false);
 

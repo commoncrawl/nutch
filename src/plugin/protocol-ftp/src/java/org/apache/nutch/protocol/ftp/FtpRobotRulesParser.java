@@ -87,8 +87,8 @@ public class FtpRobotRulesParser extends RobotRulesParser {
 
     if (robotRules != null) {
       return robotRules; // cached rule
-    } else if (LOG.isTraceEnabled()) {
-      LOG.trace("cache miss " + url);
+    } else {
+      LOG.trace("cache miss {}", url);
     }
 
     boolean cacheRule = true;
@@ -120,9 +120,7 @@ public class FtpRobotRulesParser extends RobotRulesParser {
           robotRules = EMPTY_RULES; // use default rules
         }
       } catch (Throwable t) {
-        if (LOG.isInfoEnabled()) {
-          LOG.info("Couldn't get robots.txt for " + url + ": " + t.toString());
-        }
+        LOG.info("Couldn't get robots.txt for {}: {}", url, t.toString());
         cacheRule = false; // try again later to fetch robots.txt
         robotRules = EMPTY_RULES;
       }

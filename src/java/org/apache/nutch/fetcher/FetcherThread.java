@@ -339,11 +339,9 @@ public class FetcherThread extends Thread {
           }
           
           do {
-            if (LOG.isInfoEnabled()) {
-              LOG.info("{} {} fetching {} (queue crawl delay={}ms)", getName(),
-                  Thread.currentThread().getId(), fit.url,
-                  fetchQueues.getFetchItemQueue(fit.queueID).crawlDelay);
-            }
+            LOG.info("{} {} fetching {} (queue crawl delay={}ms)", getName(),
+                Thread.currentThread().getId(), fit.url,
+                fetchQueues.getFetchItemQueue(fit.queueID).crawlDelay);
             LOG.debug("redirectCount={}", redirectCount);
             redirecting = false;
             Protocol protocol = this.protocolFactory.getProtocol(fit.u);
@@ -405,7 +403,7 @@ public class FetcherThread extends Thread {
                 }
                 fiq.crawlDelay = crawlDelay;
                 LOG.debug(
-                    "Crawl delay for queue: {} is set to {} as per robots.txt. url: ",
+                    "Crawl delay for queue: {} is set to {} as per robots.txt. url: {}",
                     fit.queueID, fiq.crawlDelay, fit.url);
               }
             }
@@ -506,10 +504,8 @@ public class FetcherThread extends Thread {
               break;
 
             default:
-              if (LOG.isWarnEnabled()) {
-                LOG.warn("{} {} Unknown ProtocolStatus: {}", getName(),
-                    Thread.currentThread().getId(), status.getCode());
-              }
+              LOG.warn("{} {} Unknown ProtocolStatus: {}", getName(),
+                  Thread.currentThread().getId(), status.getCode());
               output(fit.url, fit.datum, (storing404s ? content : null), status,
                   CrawlDatum.STATUS_FETCH_RETRY);
             }
@@ -518,11 +514,9 @@ public class FetcherThread extends Thread {
               fetchQueues.finishFetchItem(fit);
               context.getCounter("FetcherStatus", "redirect_count_exceeded")
                   .increment(1);
-              if (LOG.isInfoEnabled()) {
-                LOG.info("{} {} - redirect count exceeded {} ({})", getName(),
-                    Thread.currentThread().getId(), fit.url,
-                    maxRedirectExceededSkip ? "skipped" : "linked");
-              }
+              LOG.info("{} {} - redirect count exceeded {} ({})", getName(),
+                  Thread.currentThread().getId(), fit.url,
+                  maxRedirectExceededSkip ? "skipped" : "linked");
               if (maxRedirectExceededSkip) {
                 // skip redirect target when redirect count is exceeded
               } else {
@@ -553,9 +547,7 @@ public class FetcherThread extends Thread {
       }
 
     } catch (Throwable e) {
-      if (LOG.isErrorEnabled()) {
-        LOG.error("fetcher caught:", e);
-      }
+      LOG.error("fetcher caught:", e);
     } finally {
       if (fit != null) {
         fetchQueues.finishFetchItem(fit);
@@ -680,10 +672,8 @@ public class FetcherThread extends Thread {
   }
 
   private void logError(Text url, String message) {
-    if (LOG.isInfoEnabled()) {
-      LOG.info("{} {} fetch of {} failed with: {}", getName(),
-          Thread.currentThread().getId(), url, message);
-    }
+    LOG.info("{} {} fetch of {} failed with: {}", getName(),
+        Thread.currentThread().getId(), url, message);
     errors.incrementAndGet();
   }
 
@@ -741,10 +731,8 @@ public class FetcherThread extends Thread {
       try {
         scfilters.passScoreBeforeParsing(key, datum, content);
       } catch (Exception e) {
-        if (LOG.isWarnEnabled()) {
-          LOG.warn("{} {} Couldn't pass score, url {} ({})", getName(),
-              Thread.currentThread().getId(), key, e);
-        }
+        LOG.warn("{} {} Couldn't pass score, url {} ({})", getName(),
+            Thread.currentThread().getId(), key, e);
       }
 
       if (status == CrawlDatum.STATUS_FETCH_SUCCESS) {
@@ -810,10 +798,8 @@ public class FetcherThread extends Thread {
           try {
             scfilters.passScoreAfterParsing(url, content, parse);
           } catch (Exception e) {
-            if (LOG.isWarnEnabled()) {
-              LOG.warn("{} {} Couldn't pass score, url {} ({})", getName(),
-                  Thread.currentThread().getId(), key, e);
-            }
+            LOG.warn("{} {} Couldn't pass score, url {} ({})", getName(),
+                Thread.currentThread().getId(), key, e);
           }
 
           String origin = null;
@@ -934,9 +920,7 @@ public class FetcherThread extends Thread {
         }
       }
     } catch (IOException e) {
-      if (LOG.isErrorEnabled()) {
-        LOG.error("fetcher caught:", e);
-      }
+      LOG.error("fetcher caught:", e);
     }
 
     // return parse status (of the "original" URL if the ParseResult contains
@@ -954,7 +938,7 @@ public class FetcherThread extends Thread {
   
   private void outputRobotsTxt(List<Content> robotsTxtContent) throws InterruptedException {
     for (Content robotsTxt : robotsTxtContent) {
-      LOG.debug("fetched and stored robots.txt {}",
+      LOG.debug("Fetched and stored robots.txt {}",
           robotsTxt.getUrl());
       try {
         Text tUrl = new Text(robotsTxt.getUrl());
@@ -966,7 +950,7 @@ public class FetcherThread extends Thread {
               new NutchWritable(new WarcCapture(tUrl, null, robotsTxt)));
         }
       } catch (IOException e) {
-        LOG.error("fetcher caught:", e);
+        LOG.error("Fetcher failed to store the robots.txt:", e);
       }
     }
   }
