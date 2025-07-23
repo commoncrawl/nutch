@@ -608,7 +608,11 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
         // LOG.info("Skipping duplicate record: {}", value.url);
         try {
           String status = "?";
-          if (value.datum != null) {
+          if (value.content.getMetadata()
+              .get(Response.RESPONSE_HEADERS) != null) {
+            status = Integer.toString(getStatusCode(getStatusLine(
+                value.content.getMetadata().get(Response.RESPONSE_HEADERS))));
+          } else if (value.datum != null) {
             ProtocolStatus pstatus = (ProtocolStatus) value.datum.getMetaData()
                 .get(Nutch.WRITABLE_PROTO_STATUS_KEY);
             status = pstatus.getName();
