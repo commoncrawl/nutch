@@ -32,6 +32,8 @@ How to install additional requirements to build this fork of Nutch:
   sudo apt install libcld2-0 libcld2-dev
   ```
 
+- An example for running this version can be found [here](https://github.com/commoncrawl/cc-nutch-example).
+
 Apache Nutch
 ============
 
