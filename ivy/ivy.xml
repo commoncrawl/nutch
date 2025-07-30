@@ -88,7 +88,7 @@
 
 		<!-- language detection -->
 		<dependency org="org.commoncrawl" name="language-detection-cld2" rev="0.1-SNAPSHOT" />
-		<dependency org="net.java.dev.jna" name="jna" rev="5.13.0" />
+		<dependency org="net.java.dev.jna" name="jna" rev="5.17.0" />
 
 		<dependency org="xml-apis" name="xml-apis" rev="1.4.01" /><!-- force this version as it is required by Tika -->
 		<dependency org="xerces" name="xercesImpl" rev="2.12.2" />
@@ -98,7 +98,7 @@
 		<dependency org="com.google.guava" name="guava" rev="33.4.8-jre" />
 
 		<!--
-		  crawler-commons, downgraded to commons-io 2.8.0
+		  crawler-commons, downgraded to commons-io 2.8.0 shipped by Hadoop 3.3.6
 		  https://github.com/commoncrawl/crawler-commons/tree/commons-io-downgrade
 		-->
 		<dependency org="com.github.crawler-commons" name="crawler-commons" rev="1.6-SNAPSHOT" />
