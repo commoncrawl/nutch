@@ -1,13 +1,14 @@
 Common Crawl Fork of Apache Nutch
 =================================
 
-Please also have a look at the [Apache Nutch](/apache/nutch) repository and all information about Apache Nutch given below.
+Please also have a look at the [Apache Nutch](https://github.com/apache/nutch) repository and all information about Apache Nutch given below.
 
 Notable additions in Common Crawl's fork of Nutch (not yet pushed to upstream Nutch although this is planned):
 - WARC and CDX writer integrated into Fetcher and able to detect the language of HTML pages using the CLD2 language detector
 - [Generator2](src/java/org/apache/nutch/crawl/Generator2.java): alternative implementation of Generator
   - allowing to combine per-domain and per-host limits and
   - optimized to create many (eg. 100) segments in a single job
+- Unused plugins disabled in `build.xml`, to achieve a considerably more lightweight installation for our massively parallel setup.
 
 How to install additional requirements to build this fork of Nutch:
 - [crawler-commons](/crawler-commons/crawler-commons) development snapshot package:
