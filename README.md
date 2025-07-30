@@ -11,7 +11,7 @@ Notable additions in Common Crawl's fork of Nutch (not yet pushed to upstream Nu
 - Unused plugins disabled in `build.xml`, to achieve a considerably more lightweight installation for our massively parallel setup.
 
 How to install additional requirements to build this fork of Nutch:
-- [crawler-commons](/crawler-commons/crawler-commons) development snapshot package:
+- [crawler-commons](https://github.com/crawler-commons/crawler-commons) development snapshot package:
   ```
   git clone https://github.com/crawler-commons/crawler-commons.git
   cd crawler-commons/
@@ -21,7 +21,7 @@ How to install additional requirements to build this fork of Nutch:
   ```
   wget https://publicsuffix.org/list/public_suffix_list.dat -O conf/effective_tld_names.dat
   ```
-- [Java wrapper for CLD2 language detection](/commoncrawl/language-detection-cld2)
+- [Java wrapper for CLD2 language detection](https://github.com/commoncrawl/language-detection-cld2)
   ```
   git clone https://github.com/commoncrawl/language-detection-cld2.git
   cd language-detection-cld2/
