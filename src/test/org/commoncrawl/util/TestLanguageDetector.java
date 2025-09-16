@@ -16,7 +16,7 @@
  */
 package org.commoncrawl.util;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.IOException;
 import java.net.URI;
@@ -25,7 +25,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 import org.apache.nutch.protocol.Content;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class TestLanguageDetector {
 
@@ -67,9 +67,9 @@ public class TestLanguageDetector {
     doc += headerEnd + body + footer;
     content.setContent(doc.getBytes(charset));
     LanguageDetector.Result res = detector.detectLanguage(uri, content);
-    assertEquals("charset detection failed for " + language, charset, res.charset);
+    assertEquals(charset, res.charset, "charset detection failed for " + language);
     org.commoncrawl.langdetect.cld2.Result lr = res.languages;
-    assertEquals("language detection failed for " + language, language, lr.getLanguageCodeISO639_3());
+    assertEquals(language, lr.getLanguageCodeISO639_3(), "language detection failed for " + language);
   }
 
   @Test

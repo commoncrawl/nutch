@@ -113,7 +113,7 @@ public class TestCrawlDbDeduplication {
     args[1] = "-compareOrder";
     args[2] = "fetchTime,urlLength,score";
     int result = ToolRunner.run(conf, new DedupRedirectsJob(), args);
-    Assert.assertEquals("DedupRedirectsJob did not succeed", 0, result);
+    assertEquals(0, result, "DedupRedirectsJob did not succeed");
     // url3 was fetched with status 200, so it should "survive" as "db_fetched"
     // while url1 and url2 both redirect to url3 and should be duplicates
     String url1 = "http://en.wikipedia.org/wiki/URL_redirection";

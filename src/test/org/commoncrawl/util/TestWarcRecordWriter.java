@@ -16,13 +16,13 @@
  */
 package org.commoncrawl.util;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class TestWarcRecordWriter {
 
@@ -52,9 +52,9 @@ public class TestWarcRecordWriter {
 
   @Test
   public void testFormatHttpHeaders() {
-    assertEquals("Formatting HTTP header failed", testHeaderString1,
-        WarcRecordWriter.formatHttpHeaders(statusLine1,
-            Arrays.asList(testHeaders1)));
+    assertEquals(testHeaderString1, WarcRecordWriter
+        .formatHttpHeaders(statusLine1, Arrays.asList(testHeaders1)),
+        "Formatting HTTP header failed");
   }
 
   @Test
@@ -68,22 +68,23 @@ public class TestWarcRecordWriter {
     String headerStr = WarcRecordWriter.formatHttpHeaders(statusLine1,
         Arrays.asList(testHeaders1));
     String fixed = WarcRecordWriter.fixHttpHeaders(headerStr, 50000);
-    assertFalse("Content-Encoding should be removed",
-        fixed.contains("\r\nContent-Encoding:"));
-    assertTrue("Prefixed original Content-Encoding not found",
-        fixed.contains("\r\nX-Crawler-Content-Encoding:"));
-//    assertFalse("Transfer-Encoding should be removed",
-//        fixed.contains("\r\nTransfer-Encoding:"));
-    assertFalse("Content-Length to be replaced",
-        fixed.contains("\r\nContent-Length: 16378\r\n"));
-    assertTrue("Prefixed original Content-Length not found",
-        fixed.contains("\r\nX-Crawler-Content-Length: 16378\r\n"));
-    assertTrue("Correct/fixed Content-Length not found",
-        fixed.contains("\r\nContent-Length: 50000\r\n"));
+    assertFalse(fixed.contains("\r\nContent-Encoding:"),
+        "Content-Encoding should be removed");
+    assertTrue(fixed.contains("\r\nX-Crawler-Content-Encoding:"),
+        "Prefixed original Content-Encoding not found");
+//    assertFalse(fixed.contains("\r\nTransfer-Encoding:"),
+//        "Transfer-Encoding should be removed");
+    assertFalse(fixed.contains("\r\nContent-Length: 16378\r\n"),
+        "Content-Length to be replaced");
+    assertTrue(fixed.contains("\r\nX-Crawler-Content-Length: 16378\r\n"),
+        "Prefixed original Content-Length not found");
+    assertTrue(fixed.contains("\r\nContent-Length: 50000\r\n"),
+        "Correct/fixed Content-Length not found");
 
-    fixed = WarcRecordWriter.fixHttpHeaders(headerStr.replaceAll("[\r\n]+$", ""), 50000);
-    assertTrue("No trailing \\r\\n\\r\\n in HTTP headers",
-        fixed.endsWith("\r\n\r\n"));
+    fixed = WarcRecordWriter
+        .fixHttpHeaders(headerStr.replaceAll("[\r\n]+$", ""), 50000);
+    assertTrue(fixed.endsWith("\r\n\r\n"),
+        "No trailing \\r\\n\\r\\n in HTTP headers");
   }
 
   @Test
