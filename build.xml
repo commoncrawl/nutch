@@ -45,6 +45,11 @@
   <property name="spotbugs.home" value="${ivy.dir}/spotbugs-${spotbugs.version}" />
   <property name="spotbugs.jar" value="${spotbugs.home}/lib/spotbugs-ant.jar" />
 
+  <property name="jacoco.home" value="${ivy.dir}/jacoco-${jacoco.version}" />
+  <property name="jacoco.agent.jar" value="${jacoco.home}/lib/jacocoagent.jar" />
+  <property name="jacoco.ant.jar" value="${jacoco.home}/lib/jacocoant.jar" />
+  <property name="coverage.dir" value="${build.dir}/coverage" />
+
   <property name="apache-rat.version" value="0.16" />
   <property name="apache-rat.home" value="${ivy.dir}/apache-rat-${apache-rat.version}" />
   <property name="apache-rat.jar" value="${apache-rat.home}/apache-rat-${apache-rat.version}.jar" />
@@ -488,6 +493,7 @@
           description="--> run core JUnit tests">
     <delete dir="${test.build.data}"/>
     <mkdir dir="${test.build.data}"/>
+    <mkdir dir="${coverage.dir}"/>
     <copy todir="${test.build.data}">
       <fileset dir="src/testresources" includes="**/*"/>
     </copy>
@@ -502,6 +508,7 @@
         <listener type="legacy-xml" sendSysOut="true" sendSysErr="true"/>
         <fork forkMode="perTestClass">
           <jvmarg value="-Xmx1000m"/>
+          <jvmarg value="-javaagent:${jacoco.agent.jar}=destfile=${coverage.dir}/jacoco-core.exec,append=true"/>
           <sysproperty key="test.build.data" value="${test.build.data}"/>
           <sysproperty key="test.src.dir" value="${test.src.dir}"/>
           <sysproperty key="test.include.slow" value="${test.include.slow}"/>
@@ -517,6 +524,7 @@
         <listener type="legacy-xml" sendSysOut="true" sendSysErr="true"/>
         <fork forkMode="perTestClass">
           <jvmarg value="-Xmx1000m"/>
+          <jvmarg value="-javaagent:${jacoco.agent.jar}=destfile=${coverage.dir}/jacoco-core.exec,append=true"/>
           <sysproperty key="test.build.data" value="${test.build.data}"/>
           <sysproperty key="test.src.dir" value="${test.src.dir}"/>
           <sysproperty key="test.include.slow" value="${test.include.slow}"/>
