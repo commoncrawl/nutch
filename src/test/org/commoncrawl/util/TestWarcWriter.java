@@ -76,9 +76,6 @@ public class TestWarcWriter {
         "WARC revisit record should have Content-Type: application/http; msgtype=response");
     assertTrue(warcOutput.contains("WARC-Refers-To-Target-URI: https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025"),
         "WARC record should have WARC-Refers-To-Target-URI header");
-    //This line will fail. Remove after the test work
-    assertTrue(warcOutput.contains("WARC-Refers-To-Target-URI: http://example.com/page"),
-        "WARC record should have WARC-Refers-To-Target-URI header");
     assertTrue(warcOutput.contains("WARC-Profile: " + warcProfile),
         "WARC record should have WARC-Profile header");
   }
