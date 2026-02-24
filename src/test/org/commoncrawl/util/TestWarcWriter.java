@@ -38,7 +38,7 @@ public class TestWarcWriter {
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     WarcWriter writer = new WarcWriter(bos);
 
-    byte[] block = "HTTP/1.1 304\r\nContent-Type: text/html\r\n\r\n".getBytes();
+    byte[] block = "HTTP/1.1 304\r\ndate: Fri, 06 Feb 2026 10:55:35 GMT\r\n\r\n".getBytes();
 
     Configuration conf = NutchConfiguration.create();
     Metadata metadata = new Metadata();
@@ -74,11 +74,8 @@ public class TestWarcWriter {
         "WARC record should have WARC-Type: revisit");
     assertTrue(warcOutput.contains("Content-Type: application/http; msgtype=response"),
         "WARC revisit record should have Content-Type: application/http; msgtype=response");
-  // This line is the correct assert, is left for testing whether this test is running automatically.
-  // Uncomment when those tests are running
-  //    assertTrue(warcOutput.contains("WARC-Refers-To-Target-URI: https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025"),
-  //        "WARC record should have WARC-Refers-To-Target-URI header");
-
+    assertTrue(warcOutput.contains("WARC-Refers-To-Target-URI: https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025"),
+        "WARC record should have WARC-Refers-To-Target-URI header");
     //This line will fail. Remove after the test work
     assertTrue(warcOutput.contains("WARC-Refers-To-Target-URI: http://example.com/page"),
         "WARC record should have WARC-Refers-To-Target-URI header");
