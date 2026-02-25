@@ -504,6 +504,7 @@
         </fork>
         <fileset dir="${test.build.classes}">
           <include name="org/apache/nutch/**/Test*.class"/>
+          <include name="org/apache/nutch/**/*Test.class"/>
           <exclude name="**/${test.exclude}.class"/>
         </fileset>
       </testclasses>
