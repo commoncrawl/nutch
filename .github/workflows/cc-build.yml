@@ -55,3 +55,21 @@ jobs:
           curl https://publicsuffix.org/list/public_suffix_list.dat -o conf/effective_tld_names.dat
       - name: Test
         run: ant clean test -buildfile build.xml
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ./build/test/TEST-*.xml
+            ./build/**/test/TEST-*.xml
+          retention-days: 1
+      - name: Publish Test Results
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: |
+            ./build/test/TEST-*.xml
+            ./build/**/test/TEST-*.xml
+          comment_mode: always
+          fail_on: "test failures"
