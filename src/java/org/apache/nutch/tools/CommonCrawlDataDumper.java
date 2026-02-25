@@ -274,7 +274,7 @@ public class CommonCrawlDataDumper extends NutchTool implements Tool {
     if (parts == null || parts.size() == 0) {
       LOG.error( "No segment directories found in {} ",
           segmentRootDir.getAbsolutePath());
-      System.exit(1);
+      return;
     }
     LOG.info("Found {} segment parts", parts.size());
     if (gzip && !warc) {
