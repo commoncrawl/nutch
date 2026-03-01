@@ -205,7 +205,6 @@ public class WarcCdxWriter extends WarcWriter {
       data.put("ipaddress", ip);
     }
     if (recordId != null) {
-      // TEST IT!
       data.put("recordid", recordId.substring(9));
     }
     cdxOut.write(jsonWriter.writeValueAsBytes(data));
