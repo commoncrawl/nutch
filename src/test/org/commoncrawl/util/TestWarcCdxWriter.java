@@ -146,7 +146,7 @@ public class TestWarcCdxWriter {
 
     URI targetUri = new URI("https://example.com/revisit");
     Date date = new Date();
-    Content content = createContent("304", "application/http;msgtype=response");
+    Content content = createContent("304", null);
 
     writer.writeCdxLine(targetUri, date, 0, 300, null, content, true, null,
         null, "urn:uuid:rev-id-001", "192.168.1.1");
