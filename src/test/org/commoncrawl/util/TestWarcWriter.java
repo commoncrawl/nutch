@@ -16,37 +16,29 @@
  */
 package org.commoncrawl.util;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.apache.nutch.metadata.Metadata;
+import org.apache.nutch.net.protocols.HttpDateFormat;
+import org.apache.nutch.protocol.Content;
+import org.commoncrawl.util.test.SegmenterRecordReader;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Paths;
+import java.util.Date;
 import java.util.zip.GZIPInputStream;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.nutch.metadata.Metadata;
-import org.apache.nutch.protocol.Content;
-import org.apache.nutch.util.NutchConfiguration;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestWarcWriter {
 
   @Test
-  public void testWriteRevisitRecordContentType() throws IOException, URISyntaxException {
+  public void testWriteRevisitRecordContentType() throws Exception {
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     WarcWriter writer = new WarcWriter(bos);
-
-    byte[] block = "HTTP/1.1 304\r\ndate: Fri, 06 Feb 2026 10:55:35 GMT\r\n\r\n".getBytes();
-
-    Configuration conf = NutchConfiguration.create();
-    Metadata metadata = new Metadata();
-    metadata.add("Content-Type", "text/html");
-    Content content = new Content("https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025", "https://de.wikipedia.org",
-        new byte[]{}, "text/html", metadata, conf);
-
-
 
     URL resource = getClass().getResource("/test-segments/20260224170658-revisit");
     assertNotNull(resource, "Missing test resource");
@@ -54,21 +46,23 @@ public class TestWarcWriter {
     String url = "https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025";
 
     Content content = SegmenterRecordReader.retrieveContent(segmentPath, url);
-    String targetUri = content.getUrl();
+    URI targetUri = new URI(content.getUrl());
 
-    Metadata metadataFromContent = content.getMetadata();
+    Metadata metadata = content.getMetadata();
+    String ip = content.getMetadata().get("_ip_");
+    int httpStatusCode = 304;
 
-    java.util.Date date = new java.util.Date();
+    Date date = HttpDateFormat.toDate(metadata.get("date"));
     URI warcinfoId = writer.getRecordId();
     URI relatedId = writer.getRecordId();
     String warcProfile = WarcWriter.PROFILE_REVISIT_IDENTICAL_DIGEST;
-    java.util.Date refersToDate = new java.util.Date(System.currentTimeMillis() - 3600000);
+    Date refersToDate = new Date(System.currentTimeMillis() - 3600000);
     String payloadDigest = "sha1:abc123";
     String blockDigest = "sha1:def456";
 
     writer.writeWarcRevisitRecord(targetUri, ip, httpStatusCode, date,
         warcinfoId, relatedId, warcProfile, refersToDate, payloadDigest,
-        blockDigest, null, null, block, content);
+        blockDigest, null, null, content.getContent(), content);
 
     byte[] compressed = bos.toByteArray();
     ByteArrayInputStream bis = new ByteArrayInputStream(compressed);
