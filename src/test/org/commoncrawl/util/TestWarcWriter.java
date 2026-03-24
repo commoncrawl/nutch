@@ -44,11 +44,20 @@ public class TestWarcWriter {
     Metadata metadata = new Metadata();
     metadata.add("Content-Type", "text/html");
     Content content = new Content("https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025", "https://de.wikipedia.org",
-        block, "text/html", metadata, conf);
+        new byte[]{}, "text/html", metadata, conf);
 
-    URI targetUri = new URI("https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025");
-    String ip = "208.80.154.224";
-    int httpStatusCode = 304;
+
+
+    URL resource = getClass().getResource("/test-segments/20260224170658-revisit");
+    assertNotNull(resource, "Missing test resource");
+    String segmentPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
+    String url = "https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025";
+
+    Content content = SegmenterRecordReader.retrieveContent(segmentPath, url);
+    String targetUri = content.getUrl();
+
+    Metadata metadataFromContent = content.getMetadata();
+
     java.util.Date date = new java.util.Date();
     URI warcinfoId = writer.getRecordId();
     URI relatedId = writer.getRecordId();
@@ -68,7 +77,6 @@ public class TestWarcWriter {
     gis.transferTo(decompressed);
 
     String warcOutput = decompressed.toString();
-    System.out.println(warcOutput);
 
     assertTrue(warcOutput.contains("WARC-Type: revisit"),
         "WARC record should have WARC-Type: revisit");
