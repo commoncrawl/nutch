@@ -24,9 +24,8 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.net.URI;
-import java.net.URL;
-import java.nio.file.Paths;
 import java.util.Date;
 import java.util.zip.GZIPInputStream;
 
@@ -40,9 +39,9 @@ public class TestWarcWriter {
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     WarcWriter writer = new WarcWriter(bos);
 
-    URL resource = getClass().getResource("/test-segments/20260224170658-revisit");
-    assertNotNull(resource, "Missing test resource");
-    String segmentPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
+    File segmentDir = new File(System.getProperty("test.build.data", "."), "test-segments/20260224170658-revisit");
+    assertNotNull(segmentDir, "Missing segment resource");
+    String segmentPath = segmentDir.getAbsolutePath();
     String url = "https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025";
 
     Content content = SegmenterRecordReader.retrieveContent(segmentPath, url);
