@@ -197,7 +197,7 @@ public class WarcWriter {
     writeWarcKeyValue(sb, settings);
 
     byte[] ba = sb.toString().getBytes(StandardCharsets.UTF_8);
-    URI recordId = getRecordId();
+    URI recordId = getRecordId(date.getTime());
 
     writeRecord(WARC_INFO, date, CONTENT_TYPE_METADATA, recordId, extra,
         new ByteArrayInputStream(ba), ba.length);
@@ -222,7 +222,7 @@ public class WarcWriter {
       }
     }
 
-    URI recordId = getRecordId();
+    URI recordId = getRecordId(date.getTime());
     writeRecord(WARC_REQUEST, date, "application/http; msgtype=request",
         recordId, extra, block);
     return recordId;
@@ -265,7 +265,7 @@ public class WarcWriter {
 
     extra.put(WARC_IDENTIFIED_PAYLOAD_TYPE, content.getContentType());
 
-    URI recordId = getRecordId();
+    URI recordId = getRecordId(date.getTime());
     writeRecord(WARC_RESPONSE, date, CONTENT_TYPE_RESPONSE, recordId, extra, block);
     return recordId;
   }
@@ -305,7 +305,7 @@ public class WarcWriter {
       extra.put(WARC_BLOCK_DIGEST, blockDigest);
     }
 
-    URI recordId = getRecordId();
+    URI recordId = getRecordId(date.getTime());
     writeRecord(WARC_REVISIT, date, CONTENT_TYPE_RESPONSE, recordId, extra, block);
     return recordId;
   }
@@ -322,7 +322,7 @@ public class WarcWriter {
       extra.put(WARC_BLOCK_DIGEST, blockDigest);
     }
 
-    URI recordId = getRecordId();
+    URI recordId = getRecordId(date.getTime());
     writeRecord(WARC_METADATA, date, CONTENT_TYPE_METADATA, recordId, extra, block);
     return recordId;
   }
@@ -339,7 +339,7 @@ public class WarcWriter {
       extra.put(WARC_BLOCK_DIGEST, blockDigest);
     }
 
-    URI recordId = getRecordId();
+    URI recordId = getRecordId(date.getTime());
     writeRecord(WARC_CONVERSION, date, contentType, recordId, extra, block);
     return recordId;
   }
@@ -460,9 +460,22 @@ public class WarcWriter {
     return UUIDv7.randomUUID().toString();
   }
 
+  private String getUUID(long timestamp) {
+    return UUIDv7.fromTimestamp(timestamp).toString();
+  }
+
+
   public URI getRecordId() {
     try {
       return new URI("urn:uuid:" + getUUID());
+    } catch (URISyntaxException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public URI getRecordId(long timestamp) {
+    try {
+      return new URI("urn:uuid:" + getUUID(timestamp));
     } catch (URISyntaxException e) {
       throw new RuntimeException(e);
     }

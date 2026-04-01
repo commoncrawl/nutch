@@ -21,10 +21,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
-/**
- * This class was borrowed from https://github.com/belief-driven-design/blog-uuidv7
- * Copyright to the original author, and licensed as CC0.
- */
 class UUIDv7Tests {
 
     /**
@@ -316,6 +312,46 @@ class UUIDv7Tests {
 
         assertTrue(ts1 < ts2);
         assertTrue(ts2 < ts3);
+    }
+
+    // --- fromTimestamp tests ---
+
+    @Test
+    void fromTimestampHasCorrectVersionAndVariant() {
+        UUID result = UUIDv7.fromTimestamp(1_234_567_890_000L);
+
+        assertEquals(7, result.version(), "must be UUIDv7");
+        assertEquals(2, result.variant(), "must be IETF variant");
+    }
+
+    @Test
+    void fromTimestampEmbedsCorrectTimestamp() {
+        long clockMs = 1_234_567_890_000L;
+        UUID result = UUIDv7.fromTimestamp(clockMs);
+
+        long extracted = result.getMostSignificantBits() >>> 16;
+        assertEquals(clockMs, extracted, "timestamp should match input");
+    }
+
+    @Test
+    void fromTimestampHasSequenceZero() {
+        UUID result = UUIDv7.fromTimestamp(1_234_567_890_000L);
+
+        int sequence = (int) (result.getMostSignificantBits() & 0xFFFL);
+        assertEquals(0, sequence, "sequence should be 0");
+    }
+
+    @Test
+    void fromTimestampRejectsInvalidTimestamps() {
+        // Negative
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> UUIDv7.fromTimestamp(-1L));
+
+        // Exceeds 48 bits
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> UUIDv7.fromTimestamp(1L << 48));
     }
 
     // HELPERS

@@ -235,4 +235,25 @@ public final class UUIDv7 {
         return SHARED.generate();
     }
 
+    /**
+     * Creates a UUIDv7 from an explicit Unix epoch millisecond timestamp.
+     * <p>
+     * This is a stateless factory method: it does not participate in the
+     * monotonic sequence maintained by {@link #randomUUID()}. The caller
+     * is responsible for ensuring timestamp ordering.
+     * <p>
+     * The sequence counter is set to 0 and the lower 62 bits are filled
+     * with cryptographically secure random data.
+     *
+     * @param timestamp Unix epoch milliseconds (must fit in 48 bits)
+     * @return a UUIDv7 embedding the given timestamp
+     * @throws IllegalArgumentException if timestamp is negative or >= 2^48
+     */
+    public static UUID fromTimestamp(long timestamp) {
+        if ((timestamp >> 48) != 0) {
+            throw new IllegalArgumentException(
+                    "Timestamp does not fit in 48 bits: " + timestamp);
+        }
+        return SHARED.buildUUID(timestamp, 0);
+    }
 }
