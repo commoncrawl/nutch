@@ -457,7 +457,7 @@ public class WarcWriter {
   }
 
   private String getUUID() {
-    return UUID.randomUUID().toString();
+    return UUIDv7.randomUUID().toString();
   }
 
   public URI getRecordId() {
