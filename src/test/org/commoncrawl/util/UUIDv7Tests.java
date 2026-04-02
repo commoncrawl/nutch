@@ -354,6 +354,92 @@ class UUIDv7Tests {
                 () -> UUIDv7.fromTimestamp(1L << 48));
     }
 
+    // --- fromTimestamp(long, int) tests ---
+
+    @Test
+    void fromTimestampWithSequenceHasCorrectVersionAndVariant() {
+        UUID result = UUIDv7.fromTimestamp(1_234_567_890_000L, 42);
+
+        assertEquals(7, result.version(), "must be UUIDv7");
+        assertEquals(2, result.variant(), "must be IETF variant");
+    }
+
+    @Test
+    void fromTimestampWithSequenceEmbedsCorrectTimestamp() {
+        long clockMs = 1_234_567_890_000L;
+        UUID result = UUIDv7.fromTimestamp(clockMs, 10);
+
+        long extracted = result.getMostSignificantBits() >>> 16;
+        assertEquals(clockMs, extracted, "timestamp should match input");
+    }
+
+    @Test
+    void fromTimestampWithSequenceEmbedsCorrectSequence() {
+        UUID result = UUIDv7.fromTimestamp(1_234_567_890_000L, 99);
+
+        int sequence = (int) (result.getMostSignificantBits() & 0xFFFL);
+        assertEquals(99, sequence, "sequence should match input");
+    }
+
+    @Test
+    void fromTimestampWithSequenceProducesOrderedUUIDs() {
+        long ts = 1_234_567_890_000L;
+        UUID first = UUIDv7.fromTimestamp(ts, 0);
+        UUID second = UUIDv7.fromTimestamp(ts, 1);
+        UUID third = UUIDv7.fromTimestamp(ts, 2);
+
+        // Same timestamp, increasing sequence → MSB should be strictly ordered
+        assertTrue(Long.compareUnsigned(
+                first.getMostSignificantBits(),
+                second.getMostSignificantBits()) < 0,
+                "sequence 0 < sequence 1");
+        assertTrue(Long.compareUnsigned(
+                second.getMostSignificantBits(),
+                third.getMostSignificantBits()) < 0,
+                "sequence 1 < sequence 2");
+    }
+
+    @Test
+    void fromTimestampWithSequenceRejectsInvalidSequence() {
+        long ts = 1_234_567_890_000L;
+
+        // Negative sequence
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> UUIDv7.fromTimestamp(ts, -1));
+
+        // Exceeds 12 bits
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> UUIDv7.fromTimestamp(ts, 4096));
+    }
+
+    @Test
+    void fromTimestampWithSequenceRejectsInvalidTimestamp() {
+        // Negative timestamp
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> UUIDv7.fromTimestamp(-1L, 0));
+
+        // Exceeds 48 bits
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> UUIDv7.fromTimestamp(1L << 48, 0));
+    }
+
+    @Test
+    void fromTimestampWithSequenceBoundaryValues() {
+        // Minimum valid values
+        UUID min = UUIDv7.fromTimestamp(0L, 0);
+        assertEquals(0L, min.getMostSignificantBits() >>> 16);
+        assertEquals(0, (int) (min.getMostSignificantBits() & 0xFFFL));
+
+        // Maximum valid timestamp (2^48 - 1) and sequence (4095)
+        UUID max = UUIDv7.fromTimestamp((1L << 48) - 1, 4095);
+        assertEquals((1L << 48) - 1, max.getMostSignificantBits() >>> 16);
+        assertEquals(4095, (int) (max.getMostSignificantBits() & 0xFFFL));
+    }
+
     // HELPERS
 
     /**
