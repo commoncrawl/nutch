@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
-class UUIDv7Tests {
+class TestUUIDv7 {
 
     /**
      * Validates that generated UUIDs have correct version (7) and variant (2) fields
