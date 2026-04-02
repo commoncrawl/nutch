@@ -39,7 +39,7 @@ public class TestWarcWriter {
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     WarcWriter writer = new WarcWriter(bos);
 
-    File segmentDir = new File(System.getProperty("test.build.data", "."), "test-segments/20260224170658-revisit");
+    File segmentDir = new File(System.getProperty("test.build.data", "src/testresources"), "test-segments/20260224170658-revisit");
     assertNotNull(segmentDir, "Missing segment resource");
     String segmentPath = segmentDir.getAbsolutePath();
     String url = "https://de.wikipedia.org/wiki/Wikipedia:WikiCon_2025";
