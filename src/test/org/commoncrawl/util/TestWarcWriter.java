@@ -52,8 +52,8 @@ public class TestWarcWriter {
     int httpStatusCode = 304;
 
     Date date = HttpDateFormat.toDate(metadata.get("date"));
-    URI warcinfoId = writer.getRecordId();
-    URI relatedId = writer.getRecordId();
+    URI warcinfoId = writer.getRecordId(date.getTime());
+    URI relatedId = writer.getRecordId(date.getTime());
     String warcProfile = WarcWriter.PROFILE_REVISIT_IDENTICAL_DIGEST;
     Date refersToDate = new Date(System.currentTimeMillis() - 3600000);
     String payloadDigest = "sha1:abc123";
