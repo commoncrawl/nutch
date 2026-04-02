@@ -254,7 +254,10 @@ public final class UUIDv7 {
             throw new IllegalArgumentException(
                     "Timestamp does not fit in 48 bits: " + timestamp);
         }
-        return SHARED.buildUUID(timestamp, 0);
+        // RFC 9562 Section 6.2 Method 1: fill the 12-bit sub-millisecond
+        // field with random data.
+        int random12 = SHARED.random.nextInt(0x1000);
+        return SHARED.buildUUID(timestamp, random12);
     }
 
     /**

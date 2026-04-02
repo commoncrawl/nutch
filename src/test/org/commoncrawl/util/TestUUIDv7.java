@@ -334,11 +334,19 @@ class TestUUIDv7 {
     }
 
     @Test
-    void fromTimestampHasSequenceZero() {
-        UUID result = UUIDv7.fromTimestamp(1_234_567_890_000L);
-
-        int sequence = (int) (result.getMostSignificantBits() & 0xFFFL);
-        assertEquals(0, sequence, "sequence should be 0");
+    void fromTimestampUsesRandom12Bits() {
+        long ts = 1_234_567_890_000L;
+        Set<Integer> seen = new HashSet<>();
+        for (int i = 0; i < 100; i++) {
+            UUID result = UUIDv7.fromTimestamp(ts);
+            int rand12 = (int) (result.getMostSignificantBits() & 0xFFFL);
+            seen.add(rand12);
+        }
+        // With 100 draws from 4096 values, getting all zeros is impossible
+        // if the field is truly random. Even getting fewer than 2 distinct
+        // values is astronomically unlikely.
+        assertTrue(seen.size() > 1,
+                "sub-millisecond field should be random, not fixed");
     }
 
     @Test
