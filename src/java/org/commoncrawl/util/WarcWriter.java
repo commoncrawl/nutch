@@ -456,6 +456,13 @@ public class WarcWriter {
     sb.append(key).append(COLONSP).append(value).append(CRLF);
   }
 
+  /**
+   * This method is deprecated with the introduction of the UUID of type 7 that introduce a timestamp
+   * component. We use the capture timestamp for composing the UUID.
+   *
+   * @see String getUUID(long timestamp)
+   */
+  @Deprecated
   private String getUUID() {
     return UUIDv7.randomUUID().toString();
   }
@@ -464,7 +471,13 @@ public class WarcWriter {
     return UUIDv7.fromTimestamp(timestamp).toString();
   }
 
-
+  /**
+   * This method is deprecated with the introduction of the UUID of type 7 that introduce a timestamp
+   * component. We use the capture timestamp for composing the UUID.
+   *
+   * @see String getRecordId(long timestamp)
+   */
+  @Deprecated
   public URI getRecordId() {
     try {
       return new URI("urn:uuid:" + getUUID());
