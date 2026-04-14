@@ -100,15 +100,9 @@
 			<exclude module="hadoop-client" />
 		</dependency>
 
-		<dependency org="org.apache.cxf" name="cxf-rt-frontend-jaxws" rev="3.6.9" conf="*->default" />
-		<dependency org="org.apache.cxf" name="cxf-rt-frontend-jaxrs" rev="3.6.9" conf="*->default" />
-		<dependency org="org.apache.cxf" name="cxf-rt-transports-http" rev="3.6.9" conf="*->default" />
-		<dependency org="org.apache.cxf" name="cxf-rt-transports-http-jetty" rev="3.6.9" conf="*->default" />
-		<dependency org="org.apache.cxf" name="cxf-rt-rs-client" rev="3.6.9" conf="test->default" />
 		<dependency org="com.fasterxml.jackson.core" name="jackson-databind" rev="2.18.5" conf="*->default" />
 		<dependency org="com.fasterxml.jackson.core" name="jackson-annotations" rev="2.18.5" conf="*->default" />
 		<dependency org="com.fasterxml.jackson.dataformat" name="jackson-dataformat-cbor" rev="2.18.5" conf="*->default" />
-		<dependency org="com.fasterxml.jackson.jaxrs" name="jackson-jaxrs-json-provider" rev="2.18.5" conf="*->default" />
 
 		<!-- WARC artifacts needed -->
 		<dependency org="org.netpreserve.commons" name="webarchive-commons" rev="3.0.4" conf="*->default">
@@ -151,11 +145,11 @@
         <!-- MockFtpServer for in-process FTP server in protocol-ftp integration tests -->
         <dependency org="org.mockftpserver" name="MockFtpServer" rev="3.1.0" conf="test->default"/>
 
-		<!-- Jetty used to serve test pages for unit tests, but is also provided as dependency of Hadoop -->
-		<dependency org="org.eclipse.jetty" name="jetty-server" rev="12.1.5" conf="test->default">
-			<exclude org="ch.qos.reload4j" module="*" />
-			<exclude org="org.slf4j" module="slf4j-reload" />
-		</dependency>
+        <!-- Jetty used to serve test pages for unit tests, but is also provided as dependency of Hadoop -->
+        <dependency org="org.eclipse.jetty" name="jetty-server" rev="12.1.5" conf="test->default">
+			    <exclude org="ch.qos.reload4j" module="*" />
+			    <exclude org="org.slf4j" module="slf4j-reload" />
+		    </dependency>
 
 		<!--Added Because of Elasticsearch JEST client-->
 		<!--TODO refactor these to indexer-elastic-rest plugin somehow, currently doesn't resolve correctly-->
