@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.Reader.Option;
 import org.apache.hadoop.io.Text;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,7 +55,7 @@ public class TestSitemapInjector {
 
     @BeforeEach
     public void setUp() throws Exception {
-        org.apache.logging.log4j.core.config.Configurator.setLevel(
+        Configurator.setLevel(
                 "org.apache.hadoop.mapred", org.apache.logging.log4j.Level.DEBUG);
 
         conf = CrawlDBTestUtil.createContext().getConfiguration();
@@ -74,12 +77,6 @@ public class TestSitemapInjector {
         crawldbPath = new Path(testdir, "crawldb");
         fs = FileSystem.get(conf);
         fs.delete(testdir, true);
-
-        sitemapUrl = resolveFixture("sitemaps/sitemap.example.1.xml");
-
-        List<String> seeds = new ArrayList<>();
-        seeds.add(sitemapUrl);
-        CrawlDBTestUtil.generateSeedList(fs, urlPath, seeds);
     }
 
     @AfterEach
@@ -88,7 +85,13 @@ public class TestSitemapInjector {
     }
 
     @Test
-    public void injectsUrlsFromLocalSitemap() throws Exception {
+    public void injectsUrlsFromLocalSitemapKPMG() throws Exception {
+        sitemapUrl = resolveFixture("sitemaps/sitemap.example.1.xml");
+
+        List<String> seeds = new ArrayList<>();
+        seeds.add(sitemapUrl);
+        CrawlDBTestUtil.generateSeedList(fs, urlPath, seeds);
+
         SitemapInjector sitemapInjector = new SitemapInjector();
         sitemapInjector.setConf(conf);
         sitemapInjector.inject(crawldbPath, urlPath);
@@ -108,6 +111,29 @@ public class TestSitemapInjector {
         assertTrue(
                 injected.contains("https://kpmg.com/de/de/home/misc/accessibility.html"),
                 "hreflang alternate missing from CrawlDb (localized-links extraction failed)");
+
+        assertThat(injected.size(), is(3156));
+    }
+
+
+    @Test
+    public void injectsUrlsFromLocalSitemapOTHER() throws Exception {
+        sitemapUrl = resolveFixture("sitemaps/sitemap.example.2.xml");
+
+        List<String> seeds = new ArrayList<>();
+        seeds.add(sitemapUrl);
+        CrawlDBTestUtil.generateSeedList(fs, urlPath, seeds);
+
+        SitemapInjector sitemapInjector = new SitemapInjector();
+        sitemapInjector.setConf(conf);
+        sitemapInjector.inject(crawldbPath, urlPath);
+
+        List<String> injected = readCrawldb();
+
+        assertFalse(injected.isEmpty(),
+                "SitemapInjector produced an empty CrawlDb");
+
+        assertThat(injected.size(), is(1732));
     }
 
     /**
