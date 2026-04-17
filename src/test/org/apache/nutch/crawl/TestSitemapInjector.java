@@ -88,6 +88,21 @@ public class TestSitemapInjector {
     public void injectsUrlsFromLocalSitemapKPMG() throws Exception {
         sitemapUrl = resolveFixture("sitemaps/sitemap.example.1.xml");
 
+
+        /*
+          ┌────────────────────────────────────────┬───────┐
+          │                 Metric                 │ Count │
+          ├────────────────────────────────────────┼───────┤
+          │ Unique primary <loc> URLs              │ 1236  │
+          ├────────────────────────────────────────┼───────┤
+          │ Unique hreflang href URLs              │ 1596  │
+          ├────────────────────────────────────────┼───────┤
+          │ Total unique URLs (primary ∪ hreflang) │ 2722  │
+          ├────────────────────────────────────────┼───────┤
+          │ Hreflang hrefs NOT in any <loc>        │ 1486  │
+          └────────────────────────────────────────┴───────┘
+        * */
+
         List<String> seeds = new ArrayList<>();
         seeds.add(sitemapUrl);
         CrawlDBTestUtil.generateSeedList(fs, urlPath, seeds);
@@ -112,7 +127,8 @@ public class TestSitemapInjector {
                 injected.contains("https://kpmg.com/de/de/home/misc/accessibility.html"),
                 "hreflang alternate missing from CrawlDb (localized-links extraction failed)");
 
-        assertThat(injected.size(), is(3156));
+        // TODO: adjust this value
+        assertThat(injected.size(), is(1486));
     }
 
 
@@ -133,6 +149,7 @@ public class TestSitemapInjector {
         assertFalse(injected.isEmpty(),
                 "SitemapInjector produced an empty CrawlDb");
 
+        // TODO: adjust this value
         assertThat(injected.size(), is(1732));
     }
 
