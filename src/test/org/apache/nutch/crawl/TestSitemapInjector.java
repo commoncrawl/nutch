@@ -118,17 +118,16 @@ public class TestSitemapInjector {
 
         // Primary <loc> URL from sitemap.example.1.xml
         assertTrue(
-                injected.contains("https://kpmg.com/tr/tr/home/misc/accessibility.html"),
+                injected.contains("https://example.com/sitemap.html"),
                 "Primary <loc> URL missing from CrawlDb");
 
-        // hreflang alternate from the same <url> block — exercises the
+        // hreflang alternate from the same <url> block - exercises the
         // sitemap-localized-links extraction path.
         assertTrue(
-                injected.contains("https://kpmg.com/de/de/home/misc/accessibility.html"),
+                injected.contains("https://donkey.com/tr/en/sitemap.html"),
                 "hreflang alternate missing from CrawlDb (localized-links extraction failed)");
 
-        // TODO: adjust this value
-        assertThat(injected.size(), is(1486));
+        assertThat(injected.size(), is(6));
     }
 
 
@@ -149,8 +148,7 @@ public class TestSitemapInjector {
         assertFalse(injected.isEmpty(),
                 "SitemapInjector produced an empty CrawlDb");
 
-        // TODO: adjust this value
-        assertThat(injected.size(), is(1732));
+        assertThat(injected.size(), is(3));
     }
 
     /**
