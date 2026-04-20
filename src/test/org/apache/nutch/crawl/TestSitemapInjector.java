@@ -85,23 +85,8 @@ public class TestSitemapInjector {
     }
 
     @Test
-    public void injectsUrlsFromLocalSitemapKPMG() throws Exception {
+    public void injectsUrlsFromLocalSitemap1() throws Exception {
         sitemapUrl = resolveFixture("sitemaps/sitemap.example.1.xml");
-
-
-        /*
-          ┌────────────────────────────────────────┬───────┐
-          │                 Metric                 │ Count │
-          ├────────────────────────────────────────┼───────┤
-          │ Unique primary <loc> URLs              │ 1236  │
-          ├────────────────────────────────────────┼───────┤
-          │ Unique hreflang href URLs              │ 1596  │
-          ├────────────────────────────────────────┼───────┤
-          │ Total unique URLs (primary ∪ hreflang) │ 2722  │
-          ├────────────────────────────────────────┼───────┤
-          │ Hreflang hrefs NOT in any <loc>        │ 1486  │
-          └────────────────────────────────────────┴───────┘
-        * */
 
         List<String> seeds = new ArrayList<>();
         seeds.add(sitemapUrl);
@@ -124,7 +109,7 @@ public class TestSitemapInjector {
         // hreflang alternate from the same <url> block - exercises the
         // sitemap-localized-links extraction path.
         assertTrue(
-                injected.contains("https://donkey.com/tr/en/sitemap.html"),
+                injected.contains("https://example.com/tr/en/sitemap.html"),
                 "hreflang alternate missing from CrawlDb (localized-links extraction failed)");
 
         assertThat(injected.size(), is(6));
@@ -132,7 +117,7 @@ public class TestSitemapInjector {
 
 
     @Test
-    public void injectsUrlsFromLocalSitemapOTHER() throws Exception {
+    public void injectsUrlsFromLocalSitemap2() throws Exception {
         sitemapUrl = resolveFixture("sitemaps/sitemap.example.2.xml");
 
         List<String> seeds = new ArrayList<>();
