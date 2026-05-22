@@ -20,7 +20,6 @@ import java.lang.invoke.MethodHandles;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.net.MalformedURLException;
 import java.net.Proxy;
 import java.net.URI;
 import java.net.URL;
@@ -721,25 +720,6 @@ public abstract class HttpBase implements Protocol {
 
   protected abstract Response getResponse(URL url, CrawlDatum datum,
       boolean followRedirects) throws ProtocolException, IOException;
-
-  /**
-   * Resolve a relative URL against a base URL using the protocol's URL
-   * library. The default uses Java's {@link URL} constructor. Subclasses
-   * with a more lenient URL parser (e.g. OkHttp's HttpUrl, which handles
-   * malformed slashes and IDN normalization) should override.
-   *
-   * Used by {@link HttpRobotRulesParser} when following robots.txt redirects:
-   * delegating to this hook means each protocol gets to use the same URL
-   * parser for redirect resolution that it would use to actually fetch.
-   *
-   * @param base the base URL the relative URL is resolved against
-   * @param relative the relative URL string (typically a Location: header value)
-   * @return resolved absolute URL
-   * @throws MalformedURLException if the URL cannot be parsed
-   */
-  protected URL resolveUrl(URL base, String relative) throws MalformedURLException {
-    return new URL(base, relative);
-  }
 
   @Override
   public BaseRobotRules getRobotRules(Text url, CrawlDatum datum,
