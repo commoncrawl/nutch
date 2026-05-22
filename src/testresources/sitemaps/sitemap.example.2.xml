@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="windows-1252"?>
+<urlset xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://www.example.org/example/</loc>
+        <xhtml:link rel="alternate" hreflang="fr-FR" href="https://www.ba.fr/example/"/>
+        <xhtml:link rel="alternate" hreflang="fr-BE" href="https://www.ba.be/example/"/>
+    </url>
+    <url>
+        <loc>https://www.example.org/example/</loc>
+    </url>
+</urlset>

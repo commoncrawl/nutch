@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="windows-1252"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+    <url>
+        <loc>https://example.com/sitemap.html</loc>
+        <lastmod>2020-12-12T07:00:11.833Z</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.2</priority>
+        <xhtml:link rel="alternate" hreflang="en-tr" href="https://example.com/tr/en/sitemap.html"/>
+        <xhtml:link rel="alternate" hreflang="tr-tr" href="https://example.com/tr/tr/sitemap.html"/>
+    </url>
+    <url>
+        <loc>https://example.com/help.html</loc>
+        <lastmod>2017-01-27T12:54:30.733Z</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.2</priority>
+        <image:image>
+            <image:loc>https://example.com/logo.png</image:loc>
+        </image:image>
+        <xhtml:link rel="alternate" hreflang="x-default" href="https://example.com/help.html"/>
+        <xhtml:link rel="alternate" hreflang="de-en" href="https://example.com/de/en/hilfe.html"/>
+        <xhtml:link rel="alternate" hreflang="it-en" href="https://example.com/it/en/aiuto.html"/>
+    </url>
+</urlset>
