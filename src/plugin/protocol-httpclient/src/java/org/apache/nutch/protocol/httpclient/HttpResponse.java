@@ -46,7 +46,6 @@ import org.apache.hadoop.io.Text;
 public class HttpResponse implements Response {
 
   private URL url;
-  private URL rawUrl;
   private byte[] content;
   private int code;
   private Metadata headers = new SpellCheckedMetadata();
@@ -72,7 +71,6 @@ public class HttpResponse implements Response {
 
     // Prepare GET method for HTTP request
     this.url = url;
-    this.rawUrl = url;
     GetMethod get = new GetMethod(url.toString());
     get.setFollowRedirects(followRedirects);
     get.setDoAuthentication(true);
@@ -225,11 +223,6 @@ public class HttpResponse implements Response {
   @Override
   public URL getUrl() {
     return url;
-  }
-
-  @Override
-  public URL getRawUrl() {
-    return rawUrl;
   }
 
   @Override
