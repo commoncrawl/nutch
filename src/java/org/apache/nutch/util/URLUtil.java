@@ -675,7 +675,7 @@ public class URLUtil {
       throws MalformedURLException {
     final IDNA.Info idnaInfo = new IDNA.Info();
     final StringBuilder hostConverted = new StringBuilder();
-      try {
+    try {
       if (toAscii) {
         idna.nameToASCII(host, hostConverted, idnaInfo);
       } else {
