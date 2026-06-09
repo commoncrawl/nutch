@@ -20,6 +20,7 @@
          xmlns:ivy="antlib:org.apache.ivy.ant"
          xmlns:artifact="antlib:org.apache.maven.artifact.ant"
          xmlns:rat="antlib:org.apache.rat.anttasks"
+         xmlns:fa="antlib:de.thetaphi.forbiddenapis"
          xmlns="antlib:org.apache.tools.ant">
 
   <!-- Load all the default properties, and any the user wants    -->
@@ -1124,6 +1125,78 @@
         <exclude name="lib/*.jar"/>
       </fileset>
     </spotbugs>
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- JaCoCo code coverage                                               -->
+  <!-- ================================================================== -->
+  <target name="jacoco-download" description="--> download JaCoCo">
+    <available file="${jacoco.agent.jar}" property="jacoco.jar.found"/>
+    <antcall target="jacoco-download-unchecked"/>
+  </target>
+
+  <target name="jacoco-download-unchecked" unless="jacoco.jar.found"
+          description="--> downloads the JaCoCo distribution zip.">
+    <get src="https://github.com/jacoco/jacoco/releases/download/v${jacoco.version}/jacoco-${jacoco.version}.zip"
+         dest="${ivy.dir}/jacoco-${jacoco.version}.zip" usetimestamp="false" />
+
+    <mkdir dir="${jacoco.home}"/>
+    <unzip src="${ivy.dir}/jacoco-${jacoco.version}.zip" dest="${jacoco.home}" />
+
+    <delete file="${ivy.dir}/jacoco-${jacoco.version}.zip" />
+  </target>
+
+  <target name="jacoco-report" depends="jacoco-download" description="--> generate JaCoCo XML coverage report">
+    <taskdef uri="antlib:org.jacoco.ant" resource="org/jacoco/ant/antlib.xml">
+      <classpath>
+        <pathelement location="${jacoco.ant.jar}" />
+      </classpath>
+    </taskdef>
+
+    <jacoco:merge destfile="${coverage.dir}/jacoco-merged.exec" xmlns:jacoco="antlib:org.jacoco.ant">
+      <fileset dir="${coverage.dir}" includes="*.exec"/>
+    </jacoco:merge>
+
+    <jacoco:report xmlns:jacoco="antlib:org.jacoco.ant">
+      <executiondata>
+        <file file="${coverage.dir}/jacoco-merged.exec"/>
+      </executiondata>
+      <structure name="Apache Nutch">
+        <classfiles>
+          <fileset dir="${build.classes}">
+            <include name="**/*.class"/>
+          </fileset>
+          <fileset dir="${build.dir}">
+            <include name="*/classes/**/*.class"/>
+            <exclude name="test/**"/>
+          </fileset>
+        </classfiles>
+        <sourcefiles encoding="${build.encoding}">
+          <fileset dir="${src.dir}"/>
+          <fileset dir="${plugins.dir}">
+            <include name="*/src/java/**/*.java"/>
+          </fileset>
+        </sourcefiles>
+      </structure>
+      <xml destfile="${coverage.dir}/jacoco.xml"/>
+    </jacoco:report>
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- Policeman's Forbidden API checker                                  -->
+  <!-- https://github.com/policeman-tools/forbidden-apis/wiki/AntUsage    -->
+  <!-- ================================================================== -->
+  <ivy:cachepath organisation="de.thetaphi" module="forbiddenapis" revision="${forbiddenapis.version}"
+                 inline="true" pathid="forbiddenapis.classpath"/>
+  <taskdef uri="antlib:de.thetaphi.forbiddenapis" classpathref="forbiddenapis.classpath"/>
+  <target name="forbidden-api-checks" depends="compile, resolve-test">
+    <fa:forbiddenapis classpathref="classpath" dir="${build.dir}" targetVersion="${javac.version}">
+      <bundledsignatures name="jdk-unsafe"/>
+      <bundledsignatures name="jdk-deprecated"/>
+      <bundledsignatures name="jdk-non-portable"/>
+      <bundledsignatures name="jdk-reflection"/>
+      <signaturesFileset file="src/testresources/forbidden-apis-signatures.txt"/>
+    </fa:forbiddenapis>
   </target>
 
   <!-- ================================================================== -->
