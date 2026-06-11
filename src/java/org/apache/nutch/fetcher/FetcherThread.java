@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -155,10 +156,9 @@ public class FetcherThread extends Thread {
 
   private AtomicLong bytes;
 
+  private List<Content> robotsTxtContent = null;
   private long robotsDeferVisitsDelay;
   private int robotsDeferVisitsRetries;
-
-  private List<Content> robotsTxtContent = null;
 
   private boolean robotsTxtArchivingFilterUrl = false;
   private boolean robotsTxtArchivingFilterUrlAlways = false;
@@ -673,12 +673,14 @@ public class FetcherThread extends Thread {
         if (ignoreExternalLinks) {
           String origHostOrDomain, newHostOrDomain;
           if ("bydomain".equalsIgnoreCase(ignoreExternalLinksMode)) {
-            origHostOrDomain = URLUtil.getDomainName(origUrl).toLowerCase();
-            newHostOrDomain = URLUtil.getDomainName(redirUrl).toLowerCase();
+            origHostOrDomain = URLUtil.getDomainName(origUrl)
+                .toLowerCase(Locale.ROOT);
+            newHostOrDomain = URLUtil.getDomainName(redirUrl)
+                .toLowerCase(Locale.ROOT);
           } else {
             // byHost
-            origHostOrDomain = origUrl.getHost().toLowerCase();
-            newHostOrDomain = redirUrl.getHost().toLowerCase();
+            origHostOrDomain = origUrl.getHost().toLowerCase(Locale.ROOT);
+            newHostOrDomain = redirUrl.getHost().toLowerCase(Locale.ROOT);
           }
           if (!origHostOrDomain.equals(newHostOrDomain)) {
             LOG.debug(
@@ -689,8 +691,8 @@ public class FetcherThread extends Thread {
         }
 
         if (ignoreInternalLinks) {
-          String origHost = origUrl.getHost().toLowerCase();
-          String newHost = redirUrl.getHost().toLowerCase();
+          String origHost = origUrl.getHost().toLowerCase(Locale.ROOT);
+          String newHost = redirUrl.getHost().toLowerCase(Locale.ROOT);
           if (origHost.equals(newHost)) {
             LOG.debug(
                 " - ignoring redirect {} from {} to {} because internal links are ignored",
@@ -923,11 +925,11 @@ public class FetcherThread extends Thread {
             URL originURL = new URL(url.toString());
             // based on domain?
             if ("bydomain".equalsIgnoreCase(ignoreExternalLinksMode)) {
-              origin = URLUtil.getDomainName(originURL).toLowerCase();
+              origin = URLUtil.getDomainName(originURL);
             }
             // use host
             else {
-              origin = originURL.getHost().toLowerCase();
+              origin = originURL.getHost().toLowerCase(Locale.ROOT);
             }
           }
 

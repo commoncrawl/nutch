@@ -16,13 +16,8 @@
  */
 package org.apache.nutch.protocol.okhttp;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
-
 import java.net.InetAddress;
+import java.util.Locale;
 import java.util.function.Function;
 
 import org.apache.hadoop.conf.Configuration;
@@ -30,6 +25,12 @@ import org.apache.nutch.protocol.AbstractHttpProtocolPluginTest;
 import org.junit.jupiter.api.Test;
 
 import com.google.common.net.InetAddresses;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Test cases for protocol-okhttp IP address filtering
@@ -149,7 +150,7 @@ public class TestIPAddressFiltering extends AbstractHttpProtocolPluginTest {
     try {
       InetAddress addr = InetAddresses.forString(ipAddress);
       Function<InetAddress,Boolean> pred = null;
-      switch (type.toLowerCase()) {
+      switch (type.toLowerCase(Locale.ROOT)) {
       case "localhost":
       case "loopback":
         pred = InetAddress::isLoopbackAddress;

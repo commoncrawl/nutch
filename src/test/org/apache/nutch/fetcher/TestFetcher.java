@@ -16,6 +16,10 @@
  */
 package org.apache.nutch.fetcher;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,17 +37,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Basic fetcher test 1. generate seedlist 2. inject 3. generate 3. fetch 4.
  * Verify contents
- * 
  */
 public class TestFetcher {
 

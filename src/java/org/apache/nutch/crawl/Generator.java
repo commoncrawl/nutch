@@ -573,7 +573,7 @@ public class Generator extends NutchTool implements Tool {
           continue;
         }
 
-        hostordomain = hostordomain.toLowerCase();
+        hostordomain = hostordomain.toLowerCase(Locale.ROOT);
 
         // only filter if we are counting hosts or domains
         if (maxCount > 0) {
@@ -1159,7 +1159,7 @@ public class Generator extends NutchTool implements Tool {
     return segment;
   }
 
-  private static SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
+  private static SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss", Locale.ROOT);
 
   public static synchronized String generateSegmentName() {
     try {
