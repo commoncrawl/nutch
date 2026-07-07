@@ -113,7 +113,7 @@ public class WarcCdxWriter extends WarcWriter {
         blockDigest, protocolVersions, cipherSuites, block, content);
     long length = (countingOut.getByteCount() - offset);
     writeCdxLine(targetUri, date, offset, length, payloadDigest, content, true,
-        null, null);
+        null, null, recordId.toASCIIString(), ip);
     return recordId;
   }
 
@@ -146,13 +146,13 @@ public class WarcCdxWriter extends WarcWriter {
       }
     }
     writeCdxLine(targetUri, date, offset, length, payloadDigest, content, false,
-        redirectLocation, truncated);
+        redirectLocation, truncated, recordId.toASCIIString(), ip);
     return recordId;
   }
 
   public void writeCdxLine(final URI targetUri, final Date date, long offset,
       long length, String payloadDigest, Content content, boolean revisit,
-      String redirectLocation, String truncated) throws IOException {
+      String redirectLocation, String truncated, String recordId, String ip) throws IOException {
     String url = targetUri.toASCIIString();
     String surt = url;
     Metadata meta = content.getMetadata();
@@ -200,6 +200,12 @@ public class WarcCdxWriter extends WarcWriter {
     }
     if (redirectLocation != null) {
       data.put("redirect", redirectLocation);
+    }
+    if (ip != null) {
+      data.put("ipaddress", ip);
+    }
+    if (recordId != null) {
+      data.put("recordid", recordId.substring(9));
     }
     cdxOut.write(jsonWriter.writeValueAsBytes(data));
     cdxOut.write('\n');
