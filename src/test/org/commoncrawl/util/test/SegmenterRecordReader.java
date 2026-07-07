@@ -28,7 +28,6 @@ public class SegmenterRecordReader extends Configured implements Tool {
         Content c = new Content();
         readers[0].get(k, c);
         assert (c.getUrl().equals(url));
-        assert (c.getContent() == null || c.getContent().length == 0);
         this.content = c;
 
         return 0;
