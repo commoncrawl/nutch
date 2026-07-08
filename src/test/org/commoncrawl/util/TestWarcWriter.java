@@ -20,6 +20,7 @@ import org.apache.nutch.metadata.Metadata;
 import org.apache.nutch.net.protocols.HttpDateFormat;
 import org.apache.nutch.protocol.Content;
 import org.commoncrawl.util.test.SegmenterRecordReader;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -153,4 +154,122 @@ public class TestWarcWriter {
                     "timestamp must match capture date");
         }
     }
+
+  @Test
+  @Disabled("This test is testing a behaviour we are not sure we will implement - fixing the issue downstream instead of upstream. ")
+  public void testWriteResponseRecordWithMalformedURL() throws Exception {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    WarcWriter writer = new WarcWriter(bos);
+
+    File segmentDir = new File(System.getProperty("test.build.data", "."),
+            "test-segments/20260505091103-malformed-urls");
+    assertNotNull(segmentDir, "Missing segment resource");
+    String segmentPath = segmentDir.getAbsolutePath();
+    String url = "https:////sites.google.com/site/lebercailgiteennormandie/robots.txt";
+
+    Content content = SegmenterRecordReader.retrieveContent(segmentPath, url);
+    assert (content.getContent() != null && content.getContent().length > 0) : "Content in fetched 200s records must not be null.";
+    URI targetUri = new URI(content.getUrl());
+
+    Metadata metadata = content.getMetadata();
+    String ip = content.getMetadata().get("_ip_");
+    int httpStatusCode = 200;
+
+    Date date = HttpDateFormat.toDate(metadata.get("date"));
+    URI warcinfoId = writer.getRecordId();
+    URI relatedId = writer.getRecordId();
+    String payloadDigest = "sha1:abc123";
+    String blockDigest = "sha1:def456";
+
+    writer.writeWarcResponseRecord(targetUri, ip, httpStatusCode, date,
+        warcinfoId, relatedId, payloadDigest,
+        blockDigest, "false",
+            null,
+            null, content.getContent(), content);
+
+    byte[] compressed = bos.toByteArray();
+    ByteArrayInputStream bis = new ByteArrayInputStream(compressed);
+    GZIPInputStream gis = new GZIPInputStream(bis);
+    ByteArrayOutputStream decompressed = new ByteArrayOutputStream();
+    gis.transferTo(decompressed);
+
+    String warcOutput = decompressed.toString();
+
+    assertTrue(warcOutput.contains("WARC-Target-URI: https://sites.google.com/site/lebercailgiteennormandie/robots.txt"),
+        "WARC-Target-URI should be normalized to a valid URL");
+  }
+
+  @Test
+  @Disabled("This test is testing a behaviour we are not sure we will implement - fixing the issue downstream instead of upstream. ")
+  public void testWriteRequestRecordWithMalformedURL() throws Exception {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    WarcWriter writer = new WarcWriter(bos);
+
+    File segmentDir = new File(System.getProperty("test.build.data", "."),
+            "test-segments/20260505091103-malformed-urls");
+    assertNotNull(segmentDir, "Missing segment resource");
+    String segmentPath = segmentDir.getAbsolutePath();
+    String url = "https:////sites.google.com/site/lebercailgiteennormandie/robots.txt";
+
+    Content content = SegmenterRecordReader.retrieveContent(segmentPath, url);
+    assert (content.getContent() != null && content.getContent().length > 0) : "Content in fetched 200s records must not be null.";
+    URI targetUri = new URI(content.getUrl());
+
+    Metadata metadata = content.getMetadata();
+    String ip = content.getMetadata().get("_ip_");
+
+    Date date = HttpDateFormat.toDate(metadata.get("date"));
+    URI warcinfoId = writer.getRecordId();
+
+    writer.writeWarcRequestRecord(targetUri, ip, date,
+        warcinfoId, null, null, content.getContent());
+
+    byte[] compressed = bos.toByteArray();
+    ByteArrayInputStream bis = new ByteArrayInputStream(compressed);
+    GZIPInputStream gis = new GZIPInputStream(bis);
+    ByteArrayOutputStream decompressed = new ByteArrayOutputStream();
+    gis.transferTo(decompressed);
+
+    String warcOutput = decompressed.toString();
+
+    assertTrue(warcOutput.contains("WARC-Target-URI: https://sites.google.com/site/lebercailgiteennormandie/robots.txt"),
+        "WARC-Target-URI should be normalized to a valid URL");
+  }
+
+  @Test
+  @Disabled("This test is testing a behaviour we are not sure we will implement - fixing the issue downstream instead of upstream. ")
+  public void testWriteMetadataRecordWithMalformedURL() throws Exception {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    WarcWriter writer = new WarcWriter(bos);
+
+    File segmentDir = new File(System.getProperty("test.build.data", "."),
+            "test-segments/20260505091103-malformed-urls");
+    assertNotNull(segmentDir, "Missing segment resource");
+    String segmentPath = segmentDir.getAbsolutePath();
+    String url = "https:////sites.google.com/site/lebercailgiteennormandie/robots.txt";
+
+    Content content = SegmenterRecordReader.retrieveContent(segmentPath, url);
+    assert (content.getContent() != null && content.getContent().length > 0) : "Content in fetched 200s records must not be null.";
+    URI targetUri = new URI(content.getUrl());
+
+    Metadata metadata = content.getMetadata();
+    URI relatedId = writer.getRecordId();
+    String blockDigest = "sha1:def456";
+
+    Date date = HttpDateFormat.toDate(metadata.get("date"));
+    URI warcinfoId = writer.getRecordId();
+
+    writer.writeWarcMetadataRecord(targetUri, date, warcinfoId, relatedId, blockDigest, content.getContent());
+
+    byte[] compressed = bos.toByteArray();
+    ByteArrayInputStream bis = new ByteArrayInputStream(compressed);
+    GZIPInputStream gis = new GZIPInputStream(bis);
+    ByteArrayOutputStream decompressed = new ByteArrayOutputStream();
+    gis.transferTo(decompressed);
+
+    String warcOutput = decompressed.toString();
+
+    assertTrue(warcOutput.contains("WARC-Target-URI: https://sites.google.com/site/lebercailgiteennormandie/robots.txt"),
+        "WARC-Target-URI should be normalized to a valid URL");
+  }
 }
