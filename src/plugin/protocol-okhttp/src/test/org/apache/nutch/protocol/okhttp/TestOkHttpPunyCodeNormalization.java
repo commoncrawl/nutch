@@ -48,12 +48,6 @@ public class TestOkHttpPunyCodeNormalization {
 
 
     @Test
-    public void testOkHttpVersion() {
-        // Just for mental sanity, will be removed
-        assertEquals("5.3.2", okhttp3.OkHttp.VERSION);
-    }
-
-    @Test
     public void unicodeHostNormalizesToPunycode() {
         HttpUrl url = HttpUrl.parse("https://" + BRAIN_UNICODE + PARENT + PATH);
         assertNotNull(url, "HttpUrl.parse must accept Unicode host");
