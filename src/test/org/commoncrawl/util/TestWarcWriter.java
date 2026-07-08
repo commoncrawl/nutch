@@ -272,4 +272,27 @@ public class TestWarcWriter {
     assertTrue(warcOutput.contains("WARC-Target-URI: https://sites.google.com/site/lebercailgiteennormandie/robots.txt"),
         "WARC-Target-URI should be normalized to a valid URL");
   }
+
+  @Test
+  public void testSelectTargetUrlPrefersEffectiveBaseUrl() {
+    // Content.getUrl() stays the fetch key (keeps the parse/index join stable),
+    // while Content.getBaseUrl() carries the effective URL the protocol put on
+    // the wire. WARC-Target-URI must surface the effective URL.
+    String fetchKey = "https://XN--e1afmkfd.example/A%2fb";
+    String effectiveUrl = "https://xn--e1afmkfd.example/a/b";
+    assertEquals(effectiveUrl,
+        WarcRecordWriter.selectTargetUrl(fetchKey, effectiveUrl),
+        "WARC-Target-URI must use the effective (base) URL when it differs from the fetch key");
+  }
+
+  @Test
+  public void testSelectTargetUrlFallsBackToFetchKey() {
+    // No effective URL available (e.g. protocols/records that don't set a
+    // distinct base): the fetch key must be used so behaviour is unchanged.
+    String fetchKey = "https://example.org/page";
+    assertEquals(fetchKey, WarcRecordWriter.selectTargetUrl(fetchKey, null),
+        "Null base URL must fall back to the fetch key");
+    assertEquals(fetchKey, WarcRecordWriter.selectTargetUrl(fetchKey, ""),
+        "Empty base URL must fall back to the fetch key");
+  }
 }
