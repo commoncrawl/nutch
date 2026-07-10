@@ -59,13 +59,11 @@ public class ProtocolURLNormalizer implements URLNormalizer {
       .getLogger(MethodHandles.lookup().lookupClass());
 
   private String attributeFile = null;
+
+  private boolean loaded = false;
   
   // We record a map of hosts and the protocol string to be used for this host
-  private final Map<String,String> protocolsMap = new HashMap<>();
-
-  // Unify protocol strings to reduce the memory footprint (usually there are only
-  // two values (http and https)
-  private final Map<String,String> protocols = new TreeMap<>();
+  private SortedHostProtocolTable protocolsMap = null;
 
   // Map of domain suffixes and protocol to be used for all hosts below this domain
   private final Map<String,String> domainProtocolsMap = new HashMap<>();
@@ -79,11 +77,16 @@ public class ProtocolURLNormalizer implements URLNormalizer {
       Pattern.CASE_INSENSITIVE);
 
   private synchronized void readConfiguration(Reader configReader) throws IOException {
-    if (protocolsMap.size() > 0) {
+    if (loaded) {
       return;
     }
 
     BufferedReader reader = new BufferedReader(configReader);
+
+    // Temporary large map to hold the host -> protocol rules,
+    // which will be converted to a compact and already sorted map
+    final Map<String, String> protocolsMapTemp = new TreeMap<>();
+
     String line, host;
     String protocol;
     int delimiterIndex;
@@ -112,13 +115,6 @@ public class ProtocolURLNormalizer implements URLNormalizer {
           continue;
         }
 
-        /*
-         * dedup protocol values to reduce memory footprint of map: equal
-         * strings are represented by the same string object
-         */
-        protocols.putIfAbsent(protocol, protocol);
-        protocol = protocols.get(protocol);
-
         if (host.startsWith("*.")) {
           // domain pattern (eg. "*.example.com"):
           // - use ".example.com" for suffix matching,
@@ -126,17 +122,21 @@ public class ProtocolURLNormalizer implements URLNormalizer {
           //   ("www.myexample.com")
           domainProtocolsMap.put(host.substring(1), protocol);
           // but also match the bare domain name "example.com"
-          protocolsMap.put(host.substring(2), protocol);
+          protocolsMapTemp.put(host.substring(2), protocol);
         } else {
-          protocolsMap.put(host, protocol);
+          protocolsMapTemp.put(host, protocol);
         }
       }
     }
     if (domainProtocolsMap.size() > 0) {
       domainMatcher = new SuffixStringMatcher(domainProtocolsMap.keySet());
     }
+
+    protocolsMap = new SortedHostProtocolTable(protocolsMapTemp);
     LOG.info("Configuration file read: rules for {} hosts and {} domains",
         protocolsMap.size(), domainProtocolsMap.size());
+
+    loaded = true;
   }
 
   @Override
@@ -160,7 +160,7 @@ public class ProtocolURLNormalizer implements URLNormalizer {
       }
     }
 
-    // handle blank non empty input
+    // handle blank non-empty input
     if (attributeFile != null && attributeFile.trim().isEmpty()) {
       attributeFile = null;
     }
@@ -218,7 +218,8 @@ public class ProtocolURLNormalizer implements URLNormalizer {
     String requiredProtocol = null;
 
     // Do we have a rule for this host?
-    if (protocolsMap.containsKey(host)) {
+    String protocol = protocolsMap.get(host);
+    if (protocol != null) {
       requiredProtocol = protocolsMap.get(host);
     } else if (domainMatcher != null) {
       String domainMatch = domainMatcher.longestMatch(host);
