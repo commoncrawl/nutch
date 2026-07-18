@@ -376,7 +376,13 @@ public abstract class HttpBase implements Protocol {
           new Text(Integer.toString(code)));
 
       byte[] content = response.getContent();
-      Content c = new Content(u.toString(), u.toString(),
+      // pass the effective requested URL as the base,
+      // so relative links resolve against it and the
+      // WARC writer can surface it as WARC-Target-URI.
+      // url cannot be rewritten because used as fetch
+      // key: keeps the parse/index join, the signature,
+      // and MIME detection stable;
+      Content c = new Content(u.toString(), response.getUrl().toString(),
           (content == null ? EMPTY_CONTENT : content),
           response.getHeader("Content-Type"), response.getHeaders(), this.mimeTypes);
 

@@ -16,16 +16,28 @@
  */
 package org.commoncrawl.util;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Counter;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.nutch.metadata.Metadata;
+import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.net.protocols.HttpDateFormat;
 import org.apache.nutch.protocol.Content;
+import org.apache.nutch.protocol.ProtocolStatus;
+import org.apache.nutch.util.NutchConfiguration;
 import org.commoncrawl.util.test.SegmenterRecordReader;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -38,8 +50,12 @@ import java.util.zip.GZIPInputStream;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TestWarcWriter {
 
@@ -153,4 +169,99 @@ public class TestWarcWriter {
                     "timestamp must match capture date");
         }
     }
+
+  /**
+   * Drives the real {@link WarcRecordWriter#write} path (not the low-level
+   * {@link WarcWriter} record methods) to prove that WARC-Target-URI is taken
+   * from the effective URL carried on {@link Content#getBaseUrl()}, while the
+   * malformed requested URL (the fetch key on {@code WarcCapture.url} /
+   * {@code Content.getUrl()}) never becomes the target. The fixture segment
+   * ships only the Content, so a minimal successful CrawlDatum is synthesized.
+   */
+  @Test
+  public void testWriteRecordUsesEffectiveBaseUrlAsTargetUri() throws Exception {
+    Configuration conf = NutchConfiguration.create();
+
+    File segmentDir = new File(System.getProperty("test.build.data", "."),
+        "test-segments/20260505091103-malformed-urls");
+    assertNotNull(segmentDir, "Missing segment resource");
+    String segmentPath = segmentDir.getAbsolutePath();
+
+    // The fixture's Content is keyed by (and carries) the malformed requested URL.
+    String requestedUrl = "https:////sites.google.com/site/lebercailgiteennormandie/robots.txt";
+    String effectiveUrl = "https://sites.google.com/site/lebercailgiteennormandie/robots.txt";
+
+    Content fixture = SegmenterRecordReader.retrieveContent(segmentPath,
+        requestedUrl);
+    assertTrue(fixture.getContent() != null && fixture.getContent().length > 0,
+        "Content of a fetched 200 record must not be empty");
+
+    // Rebuild the Content the way the patched protocol layer now does:
+    // url = requested URL (fetch key), base = effective URL put on the wire.
+    Content content = new Content(requestedUrl, effectiveUrl,
+        fixture.getContent(), fixture.getContentType(), fixture.getMetadata(),
+        conf);
+
+    // The fixture ships only the Content, so synthesize a successful fetch datum.
+    CrawlDatum datum = new CrawlDatum();
+    datum.setStatus(CrawlDatum.STATUS_FETCH_SUCCESS);
+    datum.setFetchTime(System.currentTimeMillis());
+    datum.getMetaData().put(Nutch.WRITABLE_PROTO_STATUS_KEY,
+        ProtocolStatus.STATUS_SUCCESS);
+    datum.getMetaData().put(Nutch.PROTOCOL_STATUS_CODE_KEY, new Text("200"));
+
+    Path outputPath = new Path(
+        Files.createTempDirectory("warc-record-writer-test").toString());
+
+    // WarcRecordWriter only touches the context to increment counters.
+    TaskAttemptContext context = mock(TaskAttemptContext.class);
+    when(context.getCounter(anyString(), anyString()))
+        .thenReturn(mock(Counter.class));
+
+    WarcRecordWriter recordWriter = new WarcRecordWriter(conf, outputPath, 0,
+        context);
+    recordWriter.write(new Text(requestedUrl),
+        new WarcCapture(new Text(requestedUrl), datum, content));
+    recordWriter.close(context);
+
+    File[] warcFiles = new File(outputPath.toString(), "warc")
+        .listFiles((dir, name) -> name.endsWith(".warc.gz"));
+    assertNotNull(warcFiles, "No WARC file written");
+    assertEquals(1, warcFiles.length, "Expected exactly one WARC file");
+
+    // WarcWriter gzip-compresses every record, so the file must be inflated.
+    String warcOutput;
+    try (GZIPInputStream gis = new GZIPInputStream(
+        new FileInputStream(warcFiles[0]))) {
+      warcOutput = new String(gis.readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    assertTrue(warcOutput.contains("WARC-Target-URI: " + effectiveUrl),
+        "WARC-Target-URI must be the effective (base) URL");
+    assertFalse(warcOutput.contains("WARC-Target-URI: " + requestedUrl),
+        "The malformed requested URL must not be used as WARC-Target-URI");
+  }
+
+  @Test
+  public void testSelectTargetUrlPrefersEffectiveBaseUrl() {
+    // Content.getUrl() stays the fetch key (keeps the parse/index join stable),
+    // while Content.getBaseUrl() carries the effective URL the protocol put on
+    // the wire. WARC-Target-URI must surface the effective URL.
+    String fetchKey = "https://XN--e1afmkfd.example/A%2fb";
+    String effectiveUrl = "https://xn--e1afmkfd.example/a/b";
+    assertEquals(effectiveUrl,
+        WarcRecordWriter.selectTargetUrl(fetchKey, effectiveUrl),
+        "WARC-Target-URI must use the effective (base) URL when it differs from the fetch key");
+  }
+
+  @Test
+  public void testSelectTargetUrlFallsBackToFetchKey() {
+    // No effective URL available (e.g. protocols/records that don't set a
+    // distinct base): the fetch key must be used so behaviour is unchanged.
+    String fetchKey = "https://example.org/page";
+    assertEquals(fetchKey, WarcRecordWriter.selectTargetUrl(fetchKey, null),
+        "Null base URL must fall back to the fetch key");
+    assertEquals(fetchKey, WarcRecordWriter.selectTargetUrl(fetchKey, ""),
+        "Empty base URL must fall back to the fetch key");
+  }
 }

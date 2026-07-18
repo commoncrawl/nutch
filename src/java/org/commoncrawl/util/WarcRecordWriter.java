@@ -527,6 +527,25 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
     return new DataOutputStream(new GZIPOutputStream(fs.create(cdxFile)));
   }
 
+  /**
+   * Choose the URL that should become the WARC-Target-URI (and the CDX URL): the
+   * effective URL the protocol put on the wire, carried on
+   * {@link org.apache.nutch.protocol.Content#getBaseUrl()}, when present;
+   * otherwise the fetch key. Side-effect-free to keep it unit-testable.
+   *
+   * @param fetchKey
+   *          the crawl/fetch key ({@code WarcCapture.url}); the reduce sort key
+   * @param baseUrl
+   *          {@code Content.getBaseUrl()}, the effective request URL
+   * @return the URL to use for WARC-Target-URI
+   */
+  static String selectTargetUrl(String fetchKey, String baseUrl) {
+    if (baseUrl == null || baseUrl.isEmpty()) {
+      return fetchKey;
+    }
+    return baseUrl;
+  }
+
   @Override
   public synchronized void write(Text key, WarcCapture value)
       throws IOException {
@@ -553,22 +572,28 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
 
     URI targetUri = null;
     String url = value.url.toString();
+    // Prefer the effective URL (carried on Content's base URL, the form the
+    // protocol put on the wire) for WARC-Target-URI and the CDX line; fall back
+    // to the fetch key. Dedup, sort order and logging below keep using the fetch
+    // key `url`.
+    String targetUrl = selectTargetUrl(url, value.content.getBaseUrl());
     try {
-      targetUri = new URI(url);
+      targetUri = new URI(targetUrl);
     } catch (URISyntaxException e) {
       if (value.datum != null
           && value.datum.getStatus() == CrawlDatum.STATUS_FETCH_SUCCESS) {
         // if a successful capture, try to normalize the URL
         String urlNorm = null;
         try {
-          urlNorm = urlNormalizers.normalize(url, URLNormalizers.SCOPE_INDEXER);
+          urlNorm = urlNormalizers.normalize(targetUrl,
+              URLNormalizers.SCOPE_INDEXER);
         } catch (MalformedURLException ee) {
           // ignore, log exception observed on original URL
         }
-        if (urlNorm != null && !url.equals(urlNorm)) {
+        if (urlNorm != null && !targetUrl.equals(urlNorm)) {
           try {
             targetUri = new URI(urlNorm);
-            LOG.info("Normalized URL to valid URI: {} -> {}", url, urlNorm);
+            LOG.info("Normalized URL to valid URI: {} -> {}", targetUrl, urlNorm);
             context.getCounter(NutchMetrics.GROUP_WARC_WRITER,
                 NutchMetrics.WARC_WRITER_URI_NORMALIZED_TOTAL).increment(1);
           } catch (URISyntaxException ee) {
@@ -577,7 +602,7 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
         }
       }
       if (targetUri == null) {
-        LOG.error("Cannot write WARC record, invalid URI: {}", url);
+        LOG.error("Cannot write WARC record, invalid URI: {}", targetUrl);
         context
             .getCounter(NutchMetrics.GROUP_WARC_WRITER,
                 NutchMetrics.WARC_WRITER_SKIPPED_INVALID_URI_TOTAL)
