@@ -22,7 +22,6 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.io.Text;
-
 import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.nutch.plugin.Pluggable;
 

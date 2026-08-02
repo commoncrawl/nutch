@@ -20,22 +20,22 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.net.MalformedURLException;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.nutch.metrics.ErrorTracker;
 import org.apache.nutch.metrics.NutchMetrics;
 import org.apache.nutch.net.URLFilterException;
 import org.apache.nutch.net.URLFilters;
 import org.apache.nutch.net.URLNormalizers;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class provides a way to separate the URL normalization and filtering
  * steps from the rest of CrawlDb manipulation code.
- * 
+ *
  * @author Andrzej Bialecki
  */
 public class CrawlDbFilter extends
@@ -79,7 +79,7 @@ public class CrawlDbFilter extends
       scope = conf.get(URL_NORMALIZING_SCOPE, URLNormalizers.SCOPE_CRAWLDB);
       normalizers = new URLNormalizers(conf, scope);
     }
-    
+
     // Initialize cached counter references
     initCounters(context);
 

@@ -22,7 +22,7 @@ import org.apache.nutch.crawl.FetchSchedule;
 
 /**
  * Centralized constants for Hadoop metrics counter groups and names.
- * 
+ *
  * <p>Follows <a href="https://prometheus.io/docs/practices/naming/">Prometheus
  * naming conventions</a>:
  * <ul>
@@ -31,7 +31,7 @@ import org.apache.nutch.crawl.FetchSchedule;
  *   <li>Accumulating counters use {@code _total} suffix</li>
  *   <li>Units are included in counter names where applicable (e.g., {@code _bytes})</li>
  * </ul>
- * 
+ *
  * @since 1.22
  */
 public final class NutchMetrics {

@@ -41,11 +41,11 @@ import org.apache.nutch.crawl.NutchWritable;
 import org.apache.nutch.crawl.SignatureFactory;
 import org.apache.nutch.fetcher.Fetcher.FetcherRun;
 import org.apache.nutch.fetcher.FetcherThreadEvent.PublishEventType;
+import org.apache.nutch.metadata.Metadata;
+import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.metrics.ErrorTracker;
 import org.apache.nutch.metrics.LatencyTracker;
 import org.apache.nutch.metrics.NutchMetrics;
-import org.apache.nutch.metadata.Metadata;
-import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.net.URLExemptionFilters;
 import org.apache.nutch.net.URLFilterException;
 import org.apache.nutch.net.URLFilters;
@@ -154,7 +154,7 @@ public class FetcherThread extends Thread {
   private AtomicInteger pages;
 
   private AtomicLong bytes;
-  
+
   private long robotsDeferVisitsDelay;
   private int robotsDeferVisitsRetries;
 
@@ -169,7 +169,7 @@ public class FetcherThread extends Thread {
   //Used by the REST service
   private FetchNode fetchNode;
   private boolean reportToNutchServer;
-  
+
   //Used for publishing events
   private FetcherThreadPublisher publisher;
   private boolean activatePublisher;
@@ -199,9 +199,9 @@ public class FetcherThread extends Thread {
   // Error tracker for categorized error metrics
   private ErrorTracker errorTracker;
 
-  public FetcherThread(Configuration conf, AtomicInteger activeThreads, FetchItemQueues fetchQueues, 
+  public FetcherThread(Configuration conf, AtomicInteger activeThreads, FetchItemQueues fetchQueues,
       QueueFeeder feeder, AtomicInteger spinWaiting, AtomicLong lastRequestStart, FetcherRun.Context context,
-      AtomicInteger errors, String segmentName, boolean parsing, boolean storingContent, 
+      AtomicInteger errors, String segmentName, boolean parsing, boolean storingContent,
       AtomicInteger pages, AtomicLong bytes) {
     this.setDaemon(true); // don't hang JVM on exit
     this.setName("FetcherThread"); // use an informative name
@@ -259,7 +259,7 @@ public class FetcherThread extends Thread {
 
     if((activatePublisher=conf.getBoolean("fetcher.publisher", false)))
       this.publisher = new FetcherThreadPublisher(conf);
-    
+
     queueMode = conf.get("fetcher.queue.mode",
         FetchItemQueues.QUEUE_MODE_HOST);
     queueMode = FetchItemQueues.checkQueueMode(queueMode);
@@ -352,11 +352,11 @@ public class FetcherThread extends Thread {
     robotsTxtArchivingRobotsDeniedCounter = context.getCounter(
         NutchMetrics.FETCHER_ROBOTSTXT_ARCHIVING_GROUP,
         NutchMetrics.FETCHER_ROBOTSTXT_ARCHIVING_ROBOTS_DENIED_TOTAL);
-    
+
     // Initialize latency tracker for fetch timing
     fetchLatencyTracker = new LatencyTracker(
         NutchMetrics.GROUP_FETCHER, NutchMetrics.FETCHER_LATENCY);
-    
+
     // Initialize error tracker for categorized error metrics
     errorTracker = new ErrorTracker(NutchMetrics.GROUP_FETCHER);
   }
@@ -371,7 +371,7 @@ public class FetcherThread extends Thread {
       // checking for the server to be running and fetcher.parse to be true
       if (parsing && NutchServer.getInstance().isRunning())
         reportToNutchServer = true;
-      
+
       while (true) {
         // creating FetchNode for storing in FetchNodeDb
         if (reportToNutchServer)
@@ -419,13 +419,13 @@ public class FetcherThread extends Thread {
           // fetch the page
           redirecting = false;
           redirectCount = 0;
-          
+
           //Publisher event
           if(activatePublisher) {
             FetcherThreadEvent startEvent = new FetcherThreadEvent(PublishEventType.START, fit.getUrl().toString());
             publisher.publish(startEvent, conf);
           }
-          
+
           do {
             LOG.info("{} {} fetching {} (queue crawl delay={}ms)", getName(),
                 Thread.currentThread().getId(), fit.url,
@@ -509,7 +509,7 @@ public class FetcherThread extends Thread {
               fetchNode.setFetchTime(System.currentTimeMillis());
               fetchNode.setUrl(fit.url);
             }
-            
+
             //Publish fetch finish event
             if(activatePublisher) {
               FetcherThreadEvent endEvent = new FetcherThreadEvent(PublishEventType.END, fit.getUrl().toString());
@@ -918,14 +918,14 @@ public class FetcherThread extends Thread {
             // based on domain?
             if ("bydomain".equalsIgnoreCase(ignoreExternalLinksMode)) {
               origin = URLUtil.getDomainName(originURL).toLowerCase();
-            } 
-            // use host 
+            }
+            // use host
             else {
               origin = originURL.getHost().toLowerCase();
             }
           }
-          
-          //used by fetchNode         
+
+          //used by fetchNode
           if(fetchNode!=null){
             fetchNode.setOutlinks(links);
             fetchNode.setTitle(parseData.getTitle());
@@ -955,8 +955,8 @@ public class FetcherThread extends Thread {
             outlinkList.add(links[i]);
             outlinks.add(toUrl);
           }
-          
-          //Publish fetch report event 
+
+          //Publish fetch report event
           if(activatePublisher) {
             FetcherThreadEvent reportEvent = new FetcherThreadEvent(PublishEventType.REPORT, url.toString());
             reportEvent.addOutlinksToEventData(outlinkList);
@@ -1001,14 +1001,14 @@ public class FetcherThread extends Thread {
                 continue;
               }
               queue.alreadyFetched.add(urlHashCode);
-              
+
               // Create new FetchItem with depth incremented
               FetchItem fit = FetchItem.create(new Text(followUrl),
                   new CrawlDatum(CrawlDatum.STATUS_LINKED, interval),
                   queueMode, outlinkDepth + 1);
-              
+
               outlinksFollowingCounter.increment(1);
-              
+
               fetchQueues.addFetchItem(fit);
 
               outlinkCounter++;
@@ -1041,7 +1041,7 @@ public class FetcherThread extends Thread {
     }
     return null;
   }
-  
+
   private void addCanonicalLink(Text key, CrawlDatum datum, Content content) {
     List<String> canonicalLinks = CanonicalLinkDetector
         .detectCanonicalLinks(content);
@@ -1174,10 +1174,10 @@ public class FetcherThread extends Thread {
   public String getReprUrl() {
     return reprUrl;
   }
-  
+
   private void setReprUrl(String urlString) {
     this.reprUrl = urlString;
-    
+
   }
 
 }
