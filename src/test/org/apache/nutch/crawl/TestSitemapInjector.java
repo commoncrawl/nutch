@@ -56,7 +56,7 @@ public class TestSitemapInjector {
     @BeforeEach
     public void setUp() throws Exception {
         Configurator.setLevel(
-                "org.apache.hadoop.mapred", org.apache.logging.log4j.Level.DEBUG);
+                "org.apache.hadoop.mapreduce", org.apache.logging.log4j.Level.DEBUG);
 
         conf = CrawlDBTestUtil.createContext().getConfiguration();
 

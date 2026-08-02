@@ -23,7 +23,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.InvalidJobConfException;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.RecordWriter;
@@ -92,7 +91,7 @@ public class WarcOutputFormat extends FileOutputFormat<Text, WarcCapture> {
     // Ensure that the output directory is set and not already there
     Path outDir = getOutputPath(job);
     if (outDir == null) {
-      throw new InvalidJobConfException("Output directory not set.");
+      throw new IOException("Output directory not set.");
     }
 
     // get delegation token for outDir's file system
