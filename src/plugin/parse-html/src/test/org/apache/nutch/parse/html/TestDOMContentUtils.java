@@ -137,7 +137,11 @@ public class TestDOMContentUtils {
       new String("<html><head><title> </title>" + "</head><body> "
           + "<video width=\"320\" height=\"240\" controls> "
           + "<source src=\"movie.mp4\" type=\"video/mp4\">"
-          + "</video>" + "</body></html>"), };
+          + "</video>" + "</body></html>"),
+      new String("<html><head>"
+          + "<link rel='canonical' href='https://nutch.apache.org/' />"
+          + "<link rel='alternate' href='https://nutch.apache.org/spanish/' hreflang=\"es\" />"
+          + "</head><body>ignored</body>")};
 
   private static int SKIP = 10;
 
@@ -148,7 +152,7 @@ public class TestDOMContentUtils {
       "http://www.nutch.org//", "http://www.nutch.org//", "http://www.nutch.org/",
       "http://www.nutch.org/", "http://www.nutch.org/",
       "http://www.nutch.org/;something", "http://www.nutch.org/",
-      "http://www.nutch.org/" };
+      "http://www.nutch.org/", "https://nutch.apache.org/"  };
 
   private static final DocumentFragment testDOMs[] = new DocumentFragment[testPages.length];
 
@@ -169,11 +173,11 @@ public class TestDOMContentUtils {
           + "End this madness ! . . . .",
       "ignore ignore", "ignore ignore", "test1 test2",
       "test1 test2", "title anchor1 anchor2 anchor3",
-      "title anchor1 anchor2 anchor3 anchor4 anchor5", "title", "" };
+      "title anchor1 anchor2 anchor3 anchor4 anchor5", "title", "", "ignored" };
 
   private static final String[] answerTitle = { "title", "title", "",
       "my title", "my title", "my title", "my title", "", "", "", "", "title",
-      "title", "title", "" };
+      "title", "title", "", "" };
 
   // note: should be in page-order
   private static Outlink[][] answerOutlinks;
@@ -245,7 +249,9 @@ public class TestDOMContentUtils {
               new Outlink("http://www.nutch.org/g1", ""),
               new Outlink("http://www.nutch.org/g2", "bla bla"),
               new Outlink("http://www.nutch.org/test.gif", "bla bla"), },
-          { new Outlink("http://www.nutch.org/movie.mp4", "") } };
+          { new Outlink("http://www.nutch.org/movie.mp4", "") },
+          { new Outlink("https://nutch.apache.org/", ""),
+            new Outlink("https://nutch.apache.org/spanish/", "") } };
 
     } catch (MalformedURLException e) {
 
