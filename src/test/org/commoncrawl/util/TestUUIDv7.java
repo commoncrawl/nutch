@@ -97,7 +97,7 @@ class TestUUIDv7 {
      */
     @Test
     void concurrentGenerationProducesUniqueIds() throws Exception {
-        int threads = Runtime.getRuntime().availableProcessors() - 2;
+        int threads = Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
         int perThread = 5_000;
 
         Set<UUID> all = ConcurrentHashMap.<UUID>newKeySet(threads * perThread);
