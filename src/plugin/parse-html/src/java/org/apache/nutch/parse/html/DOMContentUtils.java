@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
 import org.apache.nutch.parse.Outlink;
 import org.apache.nutch.util.NodeWalker;
 import org.apache.nutch.util.URLUtil;
+import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -69,6 +70,7 @@ public class DOMContentUtils {
     }
   }
 
+  private LinkParams linkHrefParams = new LinkParams("link", "href", 0);
   private HashMap<String, LinkParams> linkParams = new HashMap<String, LinkParams>();
   private Configuration conf;
 
@@ -102,7 +104,7 @@ public class DOMContentUtils {
       if (!forceTags.contains(ignoreTags[i]))
         linkParams.remove(ignoreTags[i]);
     }
-    
+
     //NUTCH-2433 - Should we keep the html node where the outlinks are found?
     srcTagMetaName = this.conf
         .get("parser.html.outlinks.htmlnode_metadata_name");
@@ -114,19 +116,19 @@ public class DOMContentUtils {
    * This method takes a {@link StringBuffer} and a DOM {@link Node}, and will
    * append all the content text found beneath the DOM node to the
    * <code>StringBuffer</code>.
-   * 
+   *
    * <p>
-   * 
+   *
    * If <code>abortOnNestedAnchors</code> is true, DOM traversal will be aborted
    * and the <code>StringBuffer</code> will not contain any text encountered
    * after a nested anchor is found.
-   * 
+   *
    * <p>
-   * 
-   * @param sb a {@link StringBuffer} used to store content text 
+   *
+   * @param sb a {@link StringBuffer} used to store content text
    * found beneath the DOM node... if any exists
    * @param node a DOM {@link Node} to check for content text
-   * @param abortOnNestedAnchors true to abort if nested anchors 
+   * @param abortOnNestedAnchors true to abort if nested anchors
    * are encountered, false otherwise
    * @return true if nested anchors were found
    */
@@ -141,7 +143,7 @@ public class DOMContentUtils {
   /**
    * This is a convinience method, equivalent to
    * {@link #getText(StringBuffer,Node,boolean) getText(sb, node, false)}.
-   * @param sb a {@link StringBuffer} used to store content text 
+   * @param sb a {@link StringBuffer} used to store content text
    * found beneath the DOM node... if any exists
    * @param node a DOM {@link Node} to check for content text
    */
@@ -248,7 +250,7 @@ public class DOMContentUtils {
    * This method takes a {@link StringBuffer} and a DOM {@link Node}, and will
    * append the content text found beneath the first <code>title</code> node to
    * the <code>StringBuffer</code>.
-   * @param sb a {@link StringBuffer} used to store content text 
+   * @param sb a {@link StringBuffer} used to store content text
    * found beneath the DOM node... if any exists
    * @param node a DOM {@link Node} to check for content text
    * @return true if a title node was found, false otherwise
@@ -383,15 +385,15 @@ public class DOMContentUtils {
    * creates appropriate {@link Outlink} records for each (relative to the
    * supplied <code>base</code> URL), and adds them to the <code>outlinks</code>
    * {@link ArrayList}.
-   * 
+   *
    * <p>
-   * 
+   *
    * Links without inner structure (tags, text, etc) are discarded, as are links
    * which contain only single nested links and empty text nodes (this is a
    * common DOM-fixup artifact, at least with nekohtml).
-   * 
+   *
    * @param base the canonical {@link URL}
-   * @param outlinks the {@link ArrayList} of {@link Outlink}'s associated 
+   * @param outlinks the {@link ArrayList} of {@link Outlink}'s associated
    * with the base URL
    * @param node a {@link Node} under which to discover anchors
    */
@@ -409,7 +411,19 @@ public class DOMContentUtils {
       if (nodeType == Node.ELEMENT_NODE) {
 
         nodeName = nodeName.toLowerCase();
-        LinkParams params = (LinkParams) linkParams.get(nodeName);
+        LinkParams params = linkParams.get(nodeName);
+
+        // extract canonical and cross-language links
+        if (params == null && nodeName.equals("link")) {
+          if (((Element) currentNode).getAttribute("rel").equals("canonical")
+              || (((Element) currentNode).getAttribute("rel")
+                  .equals("alternate")
+                  && !((Element) currentNode).getAttribute("hreflang")
+                      .isEmpty())) {
+            params = linkHrefParams;
+          }
+        }
+
         if (params != null) {
           if (!shouldThrowAwayLink(currentNode, children, childLen, params)) {
 
