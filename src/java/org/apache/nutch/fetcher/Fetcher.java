@@ -635,7 +635,6 @@ public class Fetcher extends NutchTool implements Tool {
     job.setJarByClass(Fetcher.class);
     job.setMapperClass(Fetcher.FetcherRun.class);
     job.setReducerClass(Fetcher.FetcherReducer.class);
-    job.setNumReduceTasks(1);
 
     FileOutputFormat.setOutputPath(job, segment);
     job.setOutputFormatClass(FetcherOutputFormat.class);
