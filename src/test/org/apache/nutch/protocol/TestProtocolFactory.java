@@ -99,9 +99,10 @@ public class TestProtocolFactory {
     Protocol tikaProtocol = factory.getProtocol("https://tika.apache.org/");
     assertEquals("org.apache.nutch.protocol.httpclient.Http",
         tikaProtocol.getClass().getCanonicalName());
-    Protocol seleniumProtocol = factory
-        .getProtocol("https://www.selenium.dev/");
-    assertEquals("org.apache.nutch.protocol.selenium.Http",
-        seleniumProtocol.getClass().getCanonicalName());
+    // protocol-selenium is excluded from build
+//    Protocol seleniumProtocol = factory
+//        .getProtocol("https://www.selenium.dev/");
+//    assertEquals("org.apache.nutch.protocol.selenium.Http",
+//        seleniumProtocol.getClass().getCanonicalName());
   }
 }
