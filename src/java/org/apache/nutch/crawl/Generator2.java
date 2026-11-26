@@ -25,6 +25,7 @@ import java.io.Reader;
 import java.lang.invoke.MethodHandles;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -87,7 +88,7 @@ import org.slf4j.LoggerFactory;
  * for multi-billion entry URL databases, we group by host (or domain) and
  * secondary sort by score descending. No per-host (or per-domain) counts are
  * hold in memory. Grouping by IP is not supported.
- * 
+ *
  * If fetch lists are grouped by domain (see <code>generate.count.mode</code>)
  * additional limits are configurable (per domain): max. number of hosts, max.
  * number of URLs per host, number of partitions URLs of a single domain are
@@ -101,7 +102,7 @@ import org.slf4j.LoggerFactory;
  * {@link #GENERATOR_COUNT_KEEP_MIN_IN_SEGMENT}). Keeping a minimum number of
  * same-host/domain URLs together minimizes the overhead caused by DNS lookups
  * and robots.txt fetches, parsing and storing robots.txt rules.
- * 
+ *
  * All segments are partitioned in a single job which saves time when many
  * segments (e.g., <code>-maxNumSegments 100</code>) are generated
  * ({@link Generator} launches one partition job per segment).
@@ -500,11 +501,12 @@ public class Generator2 extends Configured implements Tool {
       @Override
       public String toString() {
         if (numPartitions > 1) {
-          return String.format(
+          return String.format(Locale.ROOT,
               "max. urls = %d, urls/host = %d, hosts = %d, partitions = %d",
               maxURLs, maxURLsPerHost, maxHosts, numPartitions);
         } else {
-          return String.format("max. urls = %d, urls/host = %d, hosts = %d",
+          return String.format(Locale.ROOT,
+              "max. urls = %d, urls/host = %d, hosts = %d",
               maxURLs, maxURLsPerHost, maxHosts);
         }
       }
@@ -574,7 +576,7 @@ public class Generator2 extends Configured implements Tool {
 
     /**
      * Read domain-specific limits into a map
-     * 
+     *
      * @param conf
      * @param acceptor
      *          predicate to select limits: the BiPredicate is passed a pair
@@ -591,7 +593,7 @@ public class Generator2 extends Configured implements Tool {
         if (limitsFilePath.toUri().getScheme() != null) {
           try {
             FileSystem fs = limitsFilePath.getFileSystem(conf);
-            Reader limitsReader = new InputStreamReader(fs.open(limitsFilePath));
+            Reader limitsReader = new InputStreamReader(fs.open(limitsFilePath), StandardCharsets.US_ASCII);
             return readLimitsFile(limitsReader, acceptor);
           } catch (IOException e) {
             LOG.error("Failed to read domain-specific limits", e);
@@ -610,7 +612,7 @@ public class Generator2 extends Configured implements Tool {
      * Read domain-specific limits into a map. Read selectively only those limits
      * which are applicable for the given partition (the domain is processed in
      * the given partition).
-     * 
+     *
      * @param conf
      * @param partition
      *          partition ID of current task: domains not matching the partition
@@ -1308,7 +1310,7 @@ public class Generator2 extends Configured implements Tool {
           SequenceFileOutputFormat.class, Text.class, SelectorEntry.class);
       LazyOutputFormat.setOutputFormatClass(job,
           SequenceFileOutputFormat.class);
-      
+
       try {
         boolean success = job.waitForCompletion(true);
         if (!success) {

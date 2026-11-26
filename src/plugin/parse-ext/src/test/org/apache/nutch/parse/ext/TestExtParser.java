@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,9 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * fetch and parse it using external command 'cat' and 'md5sum' alternately for
  * 10 times. Doing so also does a light stress test for class CommandRunner.java
  * (as used in ExtParser.java).
- * 
+ *
  * Warning: currently only do test on linux platform.
- * 
+ *
  * @author John Xing
  */
 public class TestExtParser {
@@ -76,7 +77,7 @@ public class TestExtParser {
     urlString = tempFile.toURI().toURL().toString();
 
     FileOutputStream fos = new FileOutputStream(tempFile);
-    fos.write(expectedText.getBytes());
+    fos.write(expectedText.getBytes(StandardCharsets.UTF_8));
     fos.close();
 
     // get nutch content

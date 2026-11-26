@@ -17,6 +17,7 @@
 package org.apache.nutch.fetcher;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 
@@ -131,7 +132,8 @@ public class TestFetcher {
       Content value = new Content();
       if (!reader.next(key, value))
         break READ_CONTENT;
-      String contentString = new String(value.getContent());
+      String contentString = new String(value.getContent(),
+          StandardCharsets.UTF_8);
       if (contentString.indexOf("Nutch fetcher test page") != -1) {
         handledurls.add(key.toString());
       }

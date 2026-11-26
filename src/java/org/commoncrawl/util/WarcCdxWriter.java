@@ -184,8 +184,8 @@ public class WarcCdxWriter extends WarcWriter {
     if (payloadDigest != null) {
       data.put("digest", payloadDigest);
     }
-    data.put("length", String.format("%d", length));
-    data.put("offset", String.format("%d", offset));
+    data.put("length", String.format(Locale.ROOT, "%d", length));
+    data.put("offset", String.format(Locale.ROOT, "%d", offset));
     data.put("filename", warcFilename);
     String val = meta.get(WarcWriter.DETECTED_CHARSET);
     if (val != null) {
