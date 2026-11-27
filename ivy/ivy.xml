@@ -146,7 +146,7 @@
         <dependency org="org.mockftpserver" name="MockFtpServer" rev="3.1.0" conf="test->default"/>
 
         <!-- Jetty used to serve test pages for unit tests, but is also provided as dependency of Hadoop -->
-        <dependency org="org.eclipse.jetty" name="jetty-server" rev="12.1.5" conf="test->default">
+        <dependency org="org.eclipse.jetty" name="jetty-server" rev="11.0.26" conf="test->default">
 			    <exclude org="ch.qos.reload4j" module="*" />
 			    <exclude org="org.slf4j" module="slf4j-reload" />
 		    </dependency>
