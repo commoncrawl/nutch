@@ -115,7 +115,7 @@ import crawlercommons.sitemaps.extension.LinkAttributes;
  * management system).
  *
  * Fetching sitemaps is done by Nutch protocol plugins to make use of special
- * settings, e.g., HTTP proxy configurations.
+ * settings, e.g., IP address filters, HTTP proxy configurations.
  *
  * The behavior how entries in the CrawlDb are overwritten by injected entries
  * does not differ from {@link Injector}. However, it is possible to run
@@ -978,7 +978,9 @@ public class SitemapInjector extends Injector {
       }
 
       public void injectURL(URL u, float sitemapScore, int sitemapInterval,
-          long lastModified, AtomicLong crossSubmitsRejected, AtomicLong hostLimitRejected) throws IOException, InterruptedException {
+          long lastModified, AtomicLong crossSubmitsRejected, AtomicLong hostLimitRejected)
+          throws IOException, InterruptedException {
+
         String url = u.toString();
         if (url.length() > maxUrlLength) {
           LOG.warn(
@@ -987,7 +989,31 @@ public class SitemapInjector extends Injector {
           return;
         }
 
-        // for simplicity do host and domain checks before normalization
+        // filter and normalize
+        try {
+          String urlNorm = filterNormalize(url);
+          if (!url.equals(urlNorm)) {
+            // URL has changed
+            url = urlNorm;
+            u = new URL(urlNorm);
+          }
+        } catch (Exception e) {
+          LOG.warn("Skipping {}:", url, e);
+          url = null;
+        }
+        if (url == null) {
+          context
+              .getCounter(NutchMetrics.GROUP_SITEMAP_INJECTOR,
+                  NutchMetrics.SITEMAP_URLS_FROM_REJECTED_BY_URL_FILTERS)
+              .increment(1);
+          return;
+        }
+
+        /*
+         * Do host and domain checks after URL normalization. This guarantees
+         * that the host name is in its canonical form, the same that is used in
+         * the cross-submit list - ASCII (Punycoded IDNs), no trailing dots.
+         */
         String host = u.getHost();
         if (injectedHosts.size() >= maxHosts && !injectedHosts.contains(host)) {
           hostLimitRejected.incrementAndGet();
@@ -1008,41 +1034,34 @@ public class SitemapInjector extends Injector {
             return;
           }
         }
+
+        // URL passed all verification steps
+        totalUrls++;
+        Text value = new Text(url);
+        CrawlDatum datum = new CrawlDatum(CrawlDatum.STATUS_INJECTED,
+            sitemapInterval, sitemapScore);
+        if (lastModified != -1) {
+          /*
+           * We cannot trust the last modified time in the sitemap without a
+           * plausibility check. Even then, this is only recommended for trusted
+           * sites.
+           */
+          // datum.setModifiedTime(lastModified);
+        }
+        datum.setFetchTime(curTime); // fetch scheduled now (inject time)
+
         try {
-          url = filterNormalize(url);
-        } catch (Exception e) {
-          LOG.warn("Skipping {}:", url, e);
-          url = null;
+          scfilters.injectedScore(value, datum);
+        } catch (ScoringFilterException e) {
+          LOG.warn(
+              "Cannot filter injected score for url {}, using default ({})",
+              url, e.getMessage());
         }
-        if (url == null) {
-          context
-              .getCounter(NutchMetrics.GROUP_SITEMAP_INJECTOR,
-                  NutchMetrics.SITEMAP_URLS_FROM_REJECTED_BY_URL_FILTERS)
-              .increment(1);
-        } else {
-          // URL passed normalizers and filters
-          totalUrls++;
-          Text value = new Text(url);
-          CrawlDatum datum = new CrawlDatum(CrawlDatum.STATUS_INJECTED,
-              sitemapInterval, sitemapScore);
-          if (lastModified != -1) {
-            // datum.setModifiedTime(lastModified);
-          }
-          datum.setFetchTime(curTime);
 
-          try {
-            scfilters.injectedScore(value, datum);
-          } catch (ScoringFilterException e) {
-            LOG.warn(
-                "Cannot filter injected score for url {}, using default ({})",
-                url, e.getMessage());
-          }
-
-          context.getCounter(NutchMetrics.GROUP_SITEMAP_INJECTOR,
-              NutchMetrics.SITEMAP_URLS_INJECTED).increment(1);
-          context.write(value, datum);
-          injectedHosts.add(host);
-        }
+        context.getCounter(NutchMetrics.GROUP_SITEMAP_INJECTOR,
+            NutchMetrics.SITEMAP_URLS_INJECTED).increment(1);
+        context.write(value, datum);
+        injectedHosts.add(host);
       }
     }
 
@@ -1184,7 +1203,7 @@ public class SitemapInjector extends Injector {
 
       stopWatch.suspend();
       LOG.info(
-          "SitemapInjector: finished fetching and processing sitemaps, elapsed: {}",
+          "SitemapInjector: finished fetching and processing sitemaps, elapsed: {} ms",
           stopWatch.getTime(TimeUnit.MILLISECONDS));
 
       if (runStepOneOnly) {
