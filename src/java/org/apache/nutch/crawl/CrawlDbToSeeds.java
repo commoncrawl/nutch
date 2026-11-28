@@ -81,7 +81,7 @@ public class CrawlDbToSeeds extends CrawlDbReader {
       public synchronized void write(Text key, CrawlDatum value)
           throws IOException {
 
-        out.write(key.toString().getBytes(StandardCharsets.UTF_8));
+        out.write(key.getBytes(), 0, key.getLength());
         out.write("\tnutch.score=".getBytes(StandardCharsets.UTF_8));
         out.write(Float.toString(normalizeScore(value.getScore())).getBytes(StandardCharsets.UTF_8));
         out.writeByte('\n');
