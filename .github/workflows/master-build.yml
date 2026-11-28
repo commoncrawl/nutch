@@ -106,8 +106,12 @@ jobs:
               - 'src/plugin/**'
             indexer_plugins:
               - 'src/plugin/indexer-*/**'
+              - 'src/plugin/lib-rabbitmq/**'
             protocol_plugins:
               - 'src/plugin/protocol-*/**'
+              - 'src/plugin/lib-http/**'
+              - 'src/plugin/lib-htmlunit/**'
+              - 'src/plugin/lib-selenium/**'
             buildconf:
               - 'build.xml'
               - 'ivy/ivy.xml'
@@ -115,15 +119,15 @@ jobs:
       # run if the build configuration or both 'core' and 'plugins' files were changed
       - name: test all
         if: ${{ steps.filter.outputs.buildconf == 'true' || ( steps.filter.outputs.core  == 'true' && steps.filter.outputs.plugins  == 'true' ) }}
-        run: ant clean test -buildfile build.xml
+        run: ant clean test forbidden-api-checks -buildfile build.xml
       # run only if 'core' files were changed
       - name: test core
         if: ${{ steps.filter.outputs.core == 'true' && steps.filter.outputs.plugins == 'false' && steps.filter.outputs.buildconf == 'false' }}
-        run: ant clean test-core -buildfile build.xml
+        run: ant clean test-core forbidden-api-checks -buildfile build.xml
       # run only if 'plugins' files were changed
       - name: test plugins
         if: ${{ steps.filter.outputs.plugins == 'true' && steps.filter.outputs.core == 'false' && steps.filter.outputs.buildconf == 'false' }}
-        run: ant clean test-plugins -buildfile build.xml
+        run: ant clean test-plugins forbidden-api-checks -buildfile build.xml
       # run indexer integration tests when indexer plugin files change (Docker required, ubuntu-latest only)
       - name: test indexer integration
         if: ${{ steps.filter.outputs.indexer_plugins == 'true' && matrix.os == 'ubuntu-latest' }}
@@ -152,3 +156,11 @@ jobs:
             ./build/test/TEST-*.xml
             ./build/**/test/TEST-*.xml
           retention-days: 1
+      - name: Upload Coverage Data
+        uses: actions/upload-artifact@v4
+        if: always() && matrix.os == 'ubuntu-latest'
+        with:
+          name: coverage-data
+          path: ./build/coverage/*.exec
+          retention-days: 1
+          if-no-files-found: ignore

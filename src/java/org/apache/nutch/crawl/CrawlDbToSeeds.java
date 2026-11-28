@@ -19,6 +19,7 @@ package org.apache.nutch.crawl;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
+import java.nio.charset.StandardCharsets;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,14 +80,16 @@ public class CrawlDbToSeeds extends CrawlDbReader {
       @Override
       public synchronized void write(Text key, CrawlDatum value)
           throws IOException {
-        out.writeBytes(key.toString());
-        out.writeBytes("\tnutch.score=");
-        out.writeBytes(Float.toString(normalizeScore(value.getScore())));
+
+        out.write(key.getBytes(), 0, key.getLength());
+        out.write("\tnutch.score=".getBytes(StandardCharsets.UTF_8));
+        out.write(Float.toString(normalizeScore(value.getScore())).getBytes(StandardCharsets.UTF_8));
         out.writeByte('\n');
       }
 
     }
 
+    @Override
     public RecordWriter<Text, CrawlDatum> getRecordWriter(
         TaskAttemptContext job) throws IOException, InterruptedException {
       Configuration conf = job.getConfiguration();
@@ -181,6 +184,7 @@ public class CrawlDbToSeeds extends CrawlDbReader {
     return -1;
   }
 
+  @Override
   public int run(String[] args) throws IOException, InterruptedException,
       ClassNotFoundException, Exception {
 

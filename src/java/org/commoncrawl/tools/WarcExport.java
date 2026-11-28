@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 public class WarcExport extends Configured implements Tool {
@@ -99,7 +100,7 @@ public class WarcExport extends Configured implements Tool {
 
           // Has it a noindex for this url?
           if (robotsMeta != null
-              && robotsMeta.toLowerCase().contains("noindex")) {
+              && robotsMeta.toLowerCase(Locale.ROOT).contains("noindex")) {
             return;
           }
         } else if (value instanceof Content) {

@@ -76,7 +76,7 @@ public class URLPartitioner extends Partitioner<Text, Writable> implements Confi
 
   /**
    * Set domain-specific partition numbers.
-   * 
+   *
    * @param limits
    *          domain-specific limits returned by
    *          {@link SelectorReducer#readLimitsFile(java.io.Reader)}
@@ -124,7 +124,7 @@ public class URLPartitioner extends Partitioner<Text, Writable> implements Confi
       // failed to parse URL, must take URL string as fall-back
       hashCode = urlString.hashCode();
     } else if (mode.equals(PARTITION_MODE_HOST)) {
-      hashCode = url.getHost().toLowerCase().hashCode();
+      hashCode = url.getHost().toLowerCase(Locale.ROOT).hashCode();
     } else if (mode.equals(PARTITION_MODE_DOMAIN)) {
       String domainName = getDomainName(url.getHost());
       hashCode = domainName.hashCode();

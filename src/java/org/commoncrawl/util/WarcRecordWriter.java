@@ -262,7 +262,7 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
    */
   protected String getFileName(String prefix, String startDate, String endDate,
       String host, int partition) {
-    NumberFormat numberFormat = NumberFormat.getInstance();
+    NumberFormat numberFormat = NumberFormat.getInstance(Locale.ROOT);
     numberFormat.setMinimumIntegerDigits(5);
     numberFormat.setGroupingUsed(false);
     return prefix + "-" + startDate + "-" + endDate + "-"
@@ -891,7 +891,7 @@ class WarcRecordWriter extends RecordWriter<Text, WarcCapture> {
 
     if (generateCdx) {
       value.content.getMetadata().add(WarcWriter.HTTP_STATUS_CODE,
-          String.format("%d", httpStatusCode));
+          String.format(Locale.ROOT, "%d", httpStatusCode));
     }
 
     LanguageDetector.Result ldres = null;

@@ -370,8 +370,8 @@ public class WarcWriter {
       copyStream(content, out, contentLength);
     }
 
-    out.write(CRLF.getBytes());
-    out.write(CRLF.getBytes());
+    out.write(CRLF.getBytes(StandardCharsets.US_ASCII));
+    out.write(CRLF.getBytes(StandardCharsets.US_ASCII));
     endRecord();
   }
 
@@ -398,8 +398,8 @@ public class WarcWriter {
     out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
     out.write(block);
 
-    out.write(CRLF.getBytes());
-    out.write(CRLF.getBytes());
+    out.write(CRLF.getBytes(StandardCharsets.US_ASCII));
+    out.write(CRLF.getBytes(StandardCharsets.US_ASCII));
     endRecord();
   }
 

@@ -96,7 +96,7 @@ public class TestWarcWriter {
         ByteArrayOutputStream decompressed = new ByteArrayOutputStream();
         gis.transferTo(decompressed);
 
-        String warcOutput = decompressed.toString();
+        String warcOutput = decompressed.toString(StandardCharsets.US_ASCII);
 
         assertTrue(warcOutput.contains("WARC-Type: revisit"),
                 "WARC record should have WARC-Type: revisit");
@@ -144,7 +144,7 @@ public class TestWarcWriter {
             GZIPInputStream gis = new GZIPInputStream(bis);
             ByteArrayOutputStream decompressed = new ByteArrayOutputStream();
             gis.transferTo(decompressed);
-            allRecords.append(decompressed.toString());
+            allRecords.append(decompressed.toString(StandardCharsets.US_ASCII));
         }
         String warcOutput = allRecords.toString();
 

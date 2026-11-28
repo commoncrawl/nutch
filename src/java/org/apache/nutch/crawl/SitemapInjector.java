@@ -125,7 +125,7 @@ import crawlercommons.sitemaps.extension.LinkAttributes;
  * <li>Step 2: Inject URLs from the CrawlDb created in Step 1 into another
  * CrawlDb.</li>
  * </ol>
- * 
+ *
  * <h2>Specifics and Limitations</h2>
  *
  * SitemapInjector does <b>not</b> support:
@@ -136,7 +136,7 @@ import crawlercommons.sitemaps.extension.LinkAttributes;
  * much. But it should be made sure that the input list of sitemap URLs does not
  * contain multiple or many sitemaps from hosted on the same system.</li>
  * </ul>
- * 
+ *
  * The following features are implemented:
  * <ul>
  * <li>Respect robots.txt rules: do not access sitemaps disallowed per
@@ -154,7 +154,7 @@ import crawlercommons.sitemaps.extension.LinkAttributes;
  * {@link SitemapInjector.SitemapInjectMapper.SitemapProcessor#processSitemap(AbstractSiteMap, Set, int)}
  * for more details.</li>
  * </ul>
- * 
+ *
  */
 public class SitemapInjector extends Injector {
 
@@ -221,7 +221,7 @@ public class SitemapInjector extends Injector {
       /*
        * SiteMapParser to allow "cross submits" from different prefixes (up to
        * the last slash), cf. https://www.sitemaps.org/protocol.html#location.
-       * 
+       *
        * strict = true : do not allow cross submits. This would need to pass a
        * set of cross-submit allowed hosts beforehand which is not supported by
        * the sitemap parser. Done in SitemapInjector, see below.
@@ -298,6 +298,7 @@ public class SitemapInjector extends Injector {
           .setNameFormat("sitemapinj-%d").setDaemon(true).build());
     }
 
+    @Override
     public void map(Text key, Writable value, Context context)
         throws IOException, InterruptedException {
 
@@ -536,11 +537,11 @@ public class SitemapInjector extends Injector {
        * <li>max. number of URLs for this sitemap
        * (<code>db.injector.sitemap.max_urls</code>)</li>
        * </ul>
-       * 
+       *
        * Subsitemaps from a sitemap index are selected randomly but giving
        * precedence to sitemaps recently published or coming in front of the
        * list of subsitemaps.
-       * 
+       *
        * @param sitemap
        *          the sitemap to process
        * @param processedSitemaps
@@ -1090,6 +1091,7 @@ public class SitemapInjector extends Injector {
 
   }
 
+  @Override
   public void inject(Path crawlDb, Path urlDir, boolean overwrite,
       boolean update, boolean normalize, boolean filter,
       boolean filterNormalizeAll)
@@ -1175,7 +1177,8 @@ public class SitemapInjector extends Injector {
 
       for (Counter counter : sitemapJob.getCounters()
           .getGroup(NutchMetrics.GROUP_SITEMAP_INJECTOR)) {
-        LOG.info(String.format("SitemapInjector: %8d  %s", counter.getValue(),
+        LOG.info(String.format(Locale.ROOT,
+            "SitemapInjector: %8d  %s", counter.getValue(),
             counter.getName()));
       }
 
@@ -1251,6 +1254,7 @@ public class SitemapInjector extends Injector {
     usage();
   }
 
+  @Override
   public void usage() {
     System.err.println(
         "Usage: SitemapInjector [-D...] <crawldb> <url_dir> [-threads <n>] [-overwrite|-update] [-noFilter] [-noNormalize] [-filterNormalizeAll]\n");
@@ -1280,6 +1284,7 @@ public class SitemapInjector extends Injector {
     System.exit(res);
   }
 
+  @Override
   public int run(String[] args) throws Exception {
     if (args.length < 2) {
       usage();

@@ -16,42 +16,44 @@
  */
 package org.apache.nutch.crawl;
 
-import java.lang.invoke.MethodHandles;
 import java.io.IOException;
-import java.net.UnknownHostException;
+import java.lang.invoke.MethodHandles;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configuration.IntegerRanges;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.MapFile;
-import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.MapFile.Writer.Option;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.conf.Configuration.IntegerRanges;
 import org.apache.hadoop.io.RawComparator;
+import org.apache.hadoop.io.SequenceFile;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.OutputFormat;
 import org.apache.hadoop.mapreduce.Partitioner;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
+import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.Reducer.Context;
+import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.security.Credentials;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ResourceHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class CrawlDBTestUtil {
 
@@ -61,7 +63,7 @@ public class CrawlDBTestUtil {
   private static CrawlDbReducer reducer = new CrawlDbReducer();
   /**
    * Creates synthetic crawldb
-   * 
+   *
    * @param fs
    *          filesystem where db will be created
    * @param crawldb
@@ -202,7 +204,7 @@ public class CrawlDBTestUtil {
     public RawComparator<?> getCombinerKeyGroupingComparator() {
       return null;
     }
-  
+
     @Override
     public Configuration getConfiguration() {
       return conf;
@@ -314,7 +316,7 @@ public class CrawlDBTestUtil {
     public Class<? extends Partitioner<?, ?>> getPartitionerClass() throws ClassNotFoundException {
       return null;
     }
-    
+
     @Override
     public boolean getProfileEnabled() {
       return false;
@@ -366,7 +368,7 @@ public class CrawlDBTestUtil {
    * For now we need to manually construct our Configuration, because we need to
    * override the default one and it is currently not possible to use
    * dynamically set values.
-   * 
+   *
    * @return
    */
   public static Reducer<Text, CrawlDatum, Text, CrawlDatum>.Context createContext() {
@@ -374,7 +376,7 @@ public class CrawlDBTestUtil {
     Configuration conf = context.getConfiguration();
     conf.addResource("nutch-default.xml");
     conf.addResource("crawl-tests.xml");
-    return (Reducer<Text, CrawlDatum, Text, CrawlDatum>.Context) context;
+    return context;
   }
 
   public static class URLCrawlDatum {
@@ -391,7 +393,7 @@ public class CrawlDBTestUtil {
 
   /**
    * Generate seedlist
-   * 
+   *
    * @throws IOException
    */
   public static void generateSeedList(FileSystem fs, Path urlPath,
@@ -401,7 +403,7 @@ public class CrawlDBTestUtil {
 
   /**
    * Generate seedlist
-   * 
+   *
    * @throws IOException
    */
   public static void generateSeedList(FileSystem fs, Path urlPath,
@@ -419,14 +421,14 @@ public class CrawlDBTestUtil {
     while (urls_i.hasNext()) {
       url = urls_i.next();
 
-      out.writeBytes(url);
+      out.write(url.getBytes(UTF_8));
 
       if (metadata_i.hasNext()) {
         md = metadata_i.next();
-        out.writeBytes(md);
+        out.write(md.getBytes(UTF_8));
       }
 
-      out.writeBytes("\n");
+      out.write('\n');
     }
 
     out.flush();
@@ -435,7 +437,7 @@ public class CrawlDBTestUtil {
 
   /**
    * Creates a new JettyServer with one static root context
-   * 
+   *
    * @param port
    *          port to listen to
    * @param staticContent
