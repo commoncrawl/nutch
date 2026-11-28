@@ -990,23 +990,29 @@ public class SitemapInjector extends Injector {
         }
 
         // filter and normalize
-        try {
-          String urlNorm = filterNormalize(url);
-          if (!url.equals(urlNorm)) {
-            // URL has changed
-            url = urlNorm;
-            u = new URL(urlNorm);
-          }
-        } catch (Exception e) {
-          LOG.warn("Skipping {}:", url, e);
-          url = null;
-        }
-        if (url == null) {
+        String urlNorm = filterNormalize(url);
+        if (urlNorm == null) {
+          // URL filtered or normalization failed
           context
               .getCounter(NutchMetrics.GROUP_SITEMAP_INJECTOR,
                   NutchMetrics.SITEMAP_URLS_FROM_REJECTED_BY_URL_FILTERS)
               .increment(1);
           return;
+        }
+        if (!url.equals(urlNorm)) {
+          // URL has been normalized, need to update URL (string and URL object)
+          try {
+            u = new URL(urlNorm);
+          } catch (MalformedURLException e) {
+            // Should not happen for a properly normalized URL
+            LOG.warn("Skipping invalid URL after normalization {}:", url, e);
+            context
+              .getCounter(NutchMetrics.GROUP_SITEMAP_INJECTOR,
+                  NutchMetrics.SITEMAP_URLS_FROM_REJECTED_BY_URL_FILTERS)
+              .increment(1);
+            return;
+          }
+          url = urlNorm;
         }
 
         /*
